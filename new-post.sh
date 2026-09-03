@@ -1,38 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-usage() {
-  echo "Usage: $0 <section> [title]"
-  echo ""
-  echo "  section   lifelogs or guides"
-  echo "  title     post title (optional, will prompt if omitted)"
-  echo "  tags      comma-separated tags (optional, will prompt if omitted)"
-  exit 1
+prompt_section() {
+  while true; do
+    read -rp "Section (lifelogs/guides): " SECTION
+    if [ "$SECTION" = "lifelogs" ] || [ "$SECTION" = "guides" ]; then
+      break
+    fi
+    echo "Error: section must be 'lifelogs' or 'guides'"
+  done
 }
 
-[ $# -lt 1 ] && usage
+prompt_title() {
+  while true; do
+    read -rp "Post title: " TITLE
+    if [ -n "$TITLE" ]; then
+      break
+    fi
+    echo "Error: title cannot be empty"
+  done
+}
 
-SECTION="$1"
-TITLE="${2:-}"
-TAGS="${3:-}"
+prompt_tags() {
+  read -rp "Tags (comma-separated, optional): " TAGS
+}
 
-if [ "$SECTION" != "lifelogs" ] && [ "$SECTION" != "guides" ]; then
-  echo "Error: section must be 'lifelogs' or 'guides'"
-  exit 1
-fi
-
-if [ -z "$TITLE" ]; then
-  read -rp "Post title: " TITLE
-fi
-
-if [ -z "$TITLE" ]; then
-  echo "Error: title cannot be empty"
-  exit 1
-fi
-
-if [ -z "$TAGS" ]; then
-  read -rp "Tags (comma-separated): " TAGS
-fi
+prompt_section
+prompt_title
+prompt_tags
 
 DATE=$(date +%Y-%m-%d)
 SLUG=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$//')
