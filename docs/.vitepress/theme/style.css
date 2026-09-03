@@ -1,0 +1,490 @@
+/* --------------------------------------------------------------------------
+ * Everforest Theme
+ * -------------------------------------------------------------------------- */
+
+/* Light mode -------------------------------------------------------------- */
+
+:root {
+  /* Base */
+  --vp-c-bg: #fdf6e3;
+  --vp-c-bg-alt: #f4f0d9;
+  --vp-c-bg-elv: #f8f0dc;
+  --vp-c-bg-soft: #f0ead2;
+
+  --vp-c-text-1: #5c6a72;
+  --vp-c-text-2: #829181;
+  --vp-c-text-3: #a6b0a0;
+
+  --vp-c-divider: #d3c6aa;
+  --vp-c-gutter: #e6dfc9;
+
+  /* Everforest green */
+  --vp-c-brand-1: #8da101;
+  --vp-c-brand-2: #7a8d00;
+  --vp-c-brand-3: #66800b;
+  --vp-c-brand-soft: rgba(141, 161, 1, 0.14);
+
+  /* Semantic colors */
+  --vp-c-tip-1: #35a77c;
+  --vp-c-tip-2: #2d936d;
+  --vp-c-tip-3: #25835f;
+  --vp-c-tip-soft: rgba(53, 167, 124, 0.14);
+
+  --vp-c-warning-1: #dfa000;
+  --vp-c-warning-2: #c78e00;
+  --vp-c-warning-3: #b27c00;
+  --vp-c-warning-soft: rgba(223, 160, 0, 0.15);
+
+  --vp-c-danger-1: #f85552;
+  --vp-c-danger-2: #e64543;
+  --vp-c-danger-3: #d63d3b;
+  --vp-c-danger-soft: rgba(248, 85, 82, 0.14);
+
+  /* Neutrals */
+  --vp-c-white: #ffffff;
+  --vp-c-black: #000000;
+
+  --vp-c-gray-1: #5c6a72;
+  --vp-c-gray-2: #829181;
+  --vp-c-gray-3: #a6b0a0;
+  --vp-c-gray-soft: rgba(92, 106, 114, 0.12);
+
+  /* Buttons */
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-text: #fdf6e3;
+  --vp-button-brand-bg: #66800b;
+
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-hover-bg: #7a8d00;
+
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-active-text: #ffffff;
+  --vp-button-brand-active-bg: #8da101;
+
+  /* Custom blocks */
+  --vp-custom-block-tip-border: transparent;
+  --vp-custom-block-tip-text: #5c6a72;
+  --vp-custom-block-tip-bg: rgba(53, 167, 124, 0.14);
+  --vp-custom-block-tip-code-bg: rgba(53, 167, 124, 0.18);
+
+  /* Hero */
+  --vp-home-hero-name-color: #66800b;
+  --vp-home-hero-name-background: linear-gradient(
+    120deg,
+    #66800b,
+    #35a77c
+  );
+
+  --vp-home-hero-image-background-image: linear-gradient(
+    -45deg,
+    rgba(141, 161, 1, 0.7),
+    rgba(53, 167, 124, 0.7)
+  );
+
+  --vp-home-hero-image-filter: blur(44px);
+
+  /* Blog */
+  --blog-card-bg: #f4f0d9;
+  --blog-card-hover: rgba(141, 161, 1, 0.12);
+  --blog-post-bg: #fdf6e3;
+
+  /* GTranslate */
+  --gt-bg: #f4f0d9;
+  --gt-bg-selected: #66800b;
+  --gt-text: #5c6a72;
+  --gt-text-selected: #fdf6e3;
+  --gt-border: #d3c6aa;
+  --gt-hover-bg: rgba(141, 161, 1, 0.15);
+  --gt-hover-text: #66800b;
+}
+
+/* Dark mode --------------------------------------------------------------- */
+
+.dark {
+  /* Base */
+  --vp-c-bg: #2d353b;
+  --vp-c-bg-alt: #272e33;
+  --vp-c-bg-elv: #343f44;
+  --vp-c-bg-soft: #343f44;
+
+  --vp-c-text-1: #d3c6aa;
+  --vp-c-text-2: #9da9a0;
+  --vp-c-text-3: #7a8478;
+
+  --vp-c-divider: #475258;
+  --vp-c-gutter: #3d474d;
+
+  /* Hard Everforest green */
+  --vp-c-brand-1: #a7c080;
+  --vp-c-brand-2: #8fb573;
+  --vp-c-brand-3: #7fbbb3;
+  --vp-c-brand-soft: rgba(167, 192, 128, 0.14);
+
+  /* Semantic colors */
+  --vp-c-tip-1: #83c092;
+  --vp-c-tip-2: #7da87b;
+  --vp-c-tip-3: #6aa36f;
+  --vp-c-tip-soft: rgba(131, 192, 146, 0.14);
+
+  --vp-c-warning-1: #dbbc7f;
+  --vp-c-warning-2: #d5a86d;
+  --vp-c-warning-3: #c89d68;
+  --vp-c-warning-soft: rgba(219, 188, 127, 0.14);
+
+  --vp-c-danger-1: #e67e80;
+  --vp-c-danger-2: #d66f73;
+  --vp-c-danger-3: #c65d62;
+  --vp-c-danger-soft: rgba(230, 126, 128, 0.14);
+
+  /* Neutrals */
+  --vp-c-white: #fdf6e3;
+  --vp-c-black: #1e2326;
+
+  --vp-c-gray-1: #d3c6aa;
+  --vp-c-gray-2: #9da9a0;
+  --vp-c-gray-3: #7a8478;
+  --vp-c-gray-soft: rgba(211, 198, 170, 0.12);
+
+  /* Buttons */
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-text: #2d353b;
+  --vp-button-brand-bg: #a7c080;
+
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-hover-text: #2d353b;
+  --vp-button-brand-hover-bg: #8fb573;
+
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-active-text: #2d353b;
+  --vp-button-brand-active-bg: #7fbbb3;
+
+  /* Custom blocks */
+  --vp-custom-block-tip-border: transparent;
+  --vp-custom-block-tip-text: #d3c6aa;
+  --vp-custom-block-tip-bg: rgba(131, 192, 146, 0.14);
+  --vp-custom-block-tip-code-bg: rgba(131, 192, 146, 0.18);
+
+  /* Hero */
+  --vp-home-hero-name-color: #a7c080;
+  --vp-home-hero-name-background: linear-gradient(
+    120deg,
+    #a7c080,
+    #83c092
+  );
+
+  --vp-home-hero-image-background-image: linear-gradient(
+    -45deg,
+    rgba(167, 192, 128, 0.55),
+    rgba(131, 192, 146, 0.55)
+  );
+
+  --vp-home-hero-image-filter: blur(56px);
+
+  /* Blog */
+  --blog-card-bg: #343f44;
+  --blog-card-hover: rgba(167, 192, 128, 0.12);
+  --blog-post-bg: #2d353b;
+
+  /* GTranslate */
+  --gt-bg: #343f44;
+  --gt-bg-selected: #a7c080;
+  --gt-text: #d3c6aa;
+  --gt-text-selected: #2d353b;
+  --gt-border: #475258;
+  --gt-hover-bg: rgba(167, 192, 128, 0.16);
+  --gt-hover-text: #a7c080;
+}
+
+/* --------------------------------------------------------------------------
+ * Algolia
+ * -------------------------------------------------------------------------- */
+
+.DocSearch {
+  --docsearch-primary-color: var(--vp-c-brand-1) !important;
+}
+
+/* --------------------------------------------------------------------------
+ * Blog List
+ * -------------------------------------------------------------------------- */
+
+.blog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem 0;
+}
+
+.blog-empty {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--vp-c-text-2);
+}
+
+.blog-card {
+  display: block;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  background: var(--blog-card-bg);
+  transition:
+    border-color 0.25s,
+    box-shadow 0.25s,
+    background-color 0.25s;
+}
+
+.blog-card:hover {
+  border-color: var(--vp-c-brand-1);
+  background: var(--blog-card-hover);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+}
+
+.blog-card-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.25rem;
+  line-height: 1.4;
+  color: var(--vp-c-text-1);
+}
+
+.blog-card-date {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--vp-c-text-3);
+  margin-bottom: 0.5rem;
+}
+
+.blog-card-desc {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--vp-c-text-2);
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------------------------------
+ * Blog Post
+ * -------------------------------------------------------------------------- */
+
+.blog-post {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2rem 0;
+}
+
+.blog-post-header {
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.blog-post-title {
+  margin: 0 0 0.5rem;
+  font-size: 2rem;
+  line-height: 1.3;
+  color: var(--vp-c-text-1);
+}
+
+.blog-post-date {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--vp-c-text-3);
+  margin-bottom: 0.75rem;
+}
+
+.blog-post-desc {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--vp-c-text-2);
+  line-height: 1.6;
+}
+
+.blog-post-content {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: var(--vp-c-text-2);
+}
+
+/* --------------------------------------------------------------------------
+ * GTranslate
+ * -------------------------------------------------------------------------- */
+
+.gtranslate_wrapper {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 1000;
+}
+
+div.skiptranslate,
+#google_translate_element2 {
+  display: none !important;
+}
+
+body {
+  top: 0 !important;
+}
+
+font font {
+  background-color: transparent !important;
+  box-shadow: none !important;
+  position: initial !important;
+}
+
+.gt_float_switcher {
+  font-family: var(--vp-font-family-base) !important;
+  font-size: 14px !important;
+  border-radius: 10px !important;
+  color: var(--gt-text) !important;
+  display: inline-block !important;
+  line-height: 20px !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18) !important;
+  background: var(--gt-bg) !important;
+  border: 1px solid var(--gt-border) !important;
+  overflow: visible !important;
+  transition: all 0.3s ease !important;
+}
+
+.gt_float_switcher img {
+  vertical-align: middle !important;
+  display: inline-block !important;
+  width: 28px !important;
+  height: auto !important;
+  margin: 0 6px 0 0 !important;
+  border-radius: 3px !important;
+}
+
+.gt_float_switcher .gt-selected {
+  position: relative !important;
+  z-index: 888 !important;
+  background: var(--gt-bg-selected) !important;
+  cursor: pointer !important;
+  text-transform: uppercase !important;
+  overflow: hidden !important;
+  text-align: left !important;
+  border-radius: 10px 10px 0 0 !important;
+}
+
+.gt_float_switcher .gt-selected .gt-current-lang {
+  padding: 10px 15px !important;
+  color: var(--gt-text-selected) !important;
+  font-weight: 700 !important;
+  font-family: var(--vp-font-family-base) !important;
+}
+
+.gt_float_switcher .gt-selected .gt-current-lang span.gt-lang-code {
+  position: relative !important;
+  top: 2px !important;
+}
+
+.gt_float_switcher .gt-selected .gt-current-lang span.gt_float_switcher-arrow {
+  display: inline-block !important;
+  height: 24px !important;
+  width: 15px !important;
+  vertical-align: middle !important;
+  background-position: 50% !important;
+  background-size: 11px !important;
+  background-repeat: no-repeat !important;
+  transition: all 0.3s !important;
+  transform: rotate(-180deg) !important;
+}
+
+.gt_float_switcher .gt-selected .gt-current-lang
+span.gt_float_switcher-arrow.gt_arrow_rotate {
+  transform: rotate(0deg) !important;
+}
+
+.gt_float_switcher .gt_options {
+  position: relative !important;
+  z-index: 777 !important;
+  max-height: 250px !important;
+  overflow-y: auto !important;
+  transform: translateY(-30px) !important;
+  opacity: 0 !important;
+  cursor: pointer !important;
+  transition: all 0.4s cubic-bezier(0.3, 1.1, 0.4, 1.1) !important;
+  background: var(--gt-bg) !important;
+  border-radius: 0 0 10px 10px !important;
+}
+
+.gt_float_switcher .gt_options a {
+  display: block !important;
+  text-decoration: none !important;
+  padding: 10px 15px !important;
+  color: var(--gt-text) !important;
+  font-family: var(--vp-font-family-base) !important;
+  transition:
+    background-color 0.15s,
+    color 0.15s !important;
+  border-top: 1px solid var(--gt-border) !important;
+}
+
+.gt_float_switcher .gt_options a:hover {
+  background: var(--gt-hover-bg) !important;
+  color: var(--gt-hover-text) !important;
+}
+
+.gt_float_switcher .gt_options a.gt-current {
+  display: none !important;
+}
+
+.gt_float_switcher .gt_options.gt-open {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+}
+
+.gt_float_switcher .gt_options::-webkit-scrollbar-track {
+  background-color: var(--vp-c-bg-soft) !important;
+}
+
+.gt_float_switcher .gt_options::-webkit-scrollbar {
+  width: 5px !important;
+}
+
+.gt_float_switcher .gt_options::-webkit-scrollbar-thumb {
+  background-color: var(--vp-c-brand-1) !important;
+  border-radius: 3px !important;
+}
+
+/* --------------------------------------------------------------------------
+ * Mobile
+ * -------------------------------------------------------------------------- */
+
+@media (max-width: 640px) {
+  .gtranslate_wrapper {
+    bottom: 0.75rem;
+    right: 0.75rem;
+  }
+
+  .gt_float_switcher {
+    font-size: 13px !important;
+  }
+
+  .gt_float_switcher img {
+    width: 24px !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Hero responsive blur
+ * -------------------------------------------------------------------------- */
+
+@media (min-width: 640px) {
+  :root {
+    --vp-home-hero-image-filter: blur(56px);
+  }
+}
+
+@media (min-width: 960px) {
+  :root {
+    --vp-home-hero-image-filter: blur(68px);
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Giscus Wrapper
+ * -------------------------------------------------------------------------- */
+
+.giscus-wrapper {
+  font-family: var(--vp-font-family-base);
+}

@@ -1,0 +1,177 @@
+/*
+
+* ItaliaTroller — Everforest Giscus Theme
+* Based on Giscus custom theme variables.
+  */
+
+/* Base */
+main {
+--color-prettylights-syntax-comment: #859289;
+--color-prettylights-syntax-constant: #a7c080;
+--color-prettylights-syntax-entity: #d699b6;
+--color-prettylights-syntax-storage-modifier-import: #e67e80;
+--color-prettylights-syntax-string: #a7c080;
+--color-prettylights-syntax-variable: #dbbc7f;
+
+--color-fg-default: #d3c6aa;
+--color-fg-muted: #9da9a0;
+--color-fg-subtle: #859289;
+
+--color-canvas-default: #2d353b;
+--color-canvas-overlay: #343f44;
+--color-canvas-inset: #232a2e;
+--color-canvas-subtle: #343f44;
+
+--color-border-default: #4f585e;
+--color-border-muted: #434a4f;
+
+--color-neutral-muted: rgba(211, 198, 170, 0.12);
+
+--color-accent-fg: #a7c080;
+--color-accent-emphasis: #a7c080;
+--color-accent-muted: rgba(167, 192, 128, 0.4);
+--color-accent-subtle: rgba(167, 192, 128, 0.12);
+
+--color-success-fg: #a7c080;
+--color-attention-fg: #dbbc7f;
+--color-attention-muted: rgba(219, 188, 127, 0.4);
+--color-attention-subtle: rgba(219, 188, 127, 0.12);
+
+--color-danger-fg: #e67e80;
+--color-danger-muted: rgba(230, 126, 128, 0.4);
+--color-danger-subtle: rgba(230, 126, 128, 0.12);
+
+--color-done-fg: #d699b6;
+--color-done-muted: rgba(214, 153, 182, 0.4);
+--color-done-subtle: rgba(214, 153, 182, 0.12);
+
+--color-primer-shadow-inset: inset 0 1px 0 rgba(0, 0, 0, 0.15);
+--color-primer-shadow-focus: 0 0 0 3px rgba(167, 192, 128, 0.35);
+
+--color-scale-gray-1: #343f44;
+--color-scale-gray-2: #3d484d;
+--color-scale-gray-3: #4f585e;
+--color-scale-gray-4: #56635f;
+--color-scale-gray-5: #5f6b66;
+--color-scale-gray-6: #859289;
+--color-scale-gray-7: #9da9a0;
+--color-scale-gray-8: #d3c6aa;
+--color-scale-gray-9: #f3ead3;
+}
+
+/* Overall Giscus appearance */
+.gsc-main {
+color: #d3c6aa;
+}
+
+/* Comment cards */
+.gsc-comment-box,
+.gsc-comment {
+border-color: #4f585e;
+}
+
+.gsc-comment {
+background: #2d353b;
+}
+
+.gsc-comment-box {
+background: #343f44;
+}
+
+/* Comment header */
+.gsc-comment-header {
+background: #343f44;
+border-color: #4f585e;
+}
+
+/* Inputs */
+.gsc-comment-box-textarea,
+.gsc-comment-box-tabs {
+background: #2d353b;
+border-color: #4f585e;
+}
+
+.gsc-comment-box-textarea:focus {
+border-color: #a7c080;
+box-shadow: 0 0 0 2px rgba(167, 192, 128, 0.25);
+}
+
+/* Links */
+.gsc-comment-content a,
+.gsc-reply-content a {
+color: #a7c080;
+}
+
+.gsc-comment-content a:hover,
+.gsc-reply-content a:hover {
+color: #dbbc7f;
+}
+
+/* Buttons */
+.gsc-reply-box button,
+.gsc-comment-box button {
+border-color: #4f585e;
+background: #3d484d;
+color: #d3c6aa;
+}
+
+.gsc-reply-box button:hover,
+.gsc-comment-box button:hover {
+background: #4f585e;
+}
+
+/* Primary action */
+.gsc-comment-box button[type="submit"] {
+background: #a7c080;
+border-color: #a7c080;
+color: #2d353b;
+}
+
+.gsc-comment-box button[type="submit"]:hover {
+background: #dbbc7f;
+border-color: #dbbc7f;
+}
+
+/* Reactions */
+.gsc-reactions {
+border-color: #4f585e;
+}
+
+.gsc-reactions button {
+background: #343f44;
+border-color: #4f585e;
+color: #d3c6aa;
+}
+
+.gsc-reactions button:hover {
+border-color: #a7c080;
+background: rgba(167, 192, 128, 0.12);
+}
+
+/* Markdown code */
+.gsc-comment-content code {
+background: #343f44;
+color: #e69875;
+}
+
+.gsc-comment-content pre {
+background: #232a2e;
+border: 1px solid #4f585e;
+}
+
+/* Blockquotes */
+.gsc-comment-content blockquote {
+border-left-color: #a7c080;
+color: #9da9a0;
+}
+
+/* Muted UI */
+.gsc-comment-content,
+.gsc-reply-content {
+color: #d3c6aa;
+}
+
+.gsc-loading-image {
+opacity: 0.7;
+}
+
