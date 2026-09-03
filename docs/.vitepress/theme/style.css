@@ -362,7 +362,7 @@ font font {
   text-transform: uppercase !important;
   overflow: hidden !important;
   text-align: left !important;
-  border-radius: 10px 10px 0 0 !important;
+  border-radius: 10px !important;
 }
 
 .gt_float_switcher .gt-selected .gt-current-lang {
@@ -598,3 +598,45 @@ span.gt_float_switcher-arrow.gt_arrow_rotate {
   color: var(--vp-c-text-3);
   margin-bottom: 0.25rem;
 }
+
+/* Search input */
+.tag-search-wrapper {
+  margin: 1.5rem 0;
+}
+
+.tag-search-input {
+  width: 100%;
+  max-width: 400px;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  background: var(--vp-c-bg-alt);
+  color: var(--vp-c-text-1);
+  transition: border-color 0.25s;
+}
+
+.tag-search-input:focus {
+  outline: none;
+  border-color: var(--vp-c-brand-1);
+}
+
+/* Featured post in tag page */
+.tag-featured-post {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  background: var(--vp-c-bg-alt);
+}
+
+.tag-featured-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+}
+
+.tag-featured-desc {
+  margin: 0 0 1rem;
+  color: var(--vp-c-text-2);
+}
+
