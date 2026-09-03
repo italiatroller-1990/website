@@ -263,7 +263,7 @@ font font {
   text-transform: uppercase !important;
   overflow: hidden !important;
   text-align: left !important;
-  border-radius: 10px 10px 0 0 !important;
+  border-radius: 10px !important;
 }
 
 .gt_float_switcher .gt-selected .gt-current-lang {
