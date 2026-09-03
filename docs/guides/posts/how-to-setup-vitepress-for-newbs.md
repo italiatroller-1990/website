@@ -26,7 +26,7 @@ tags:
 
 - Tool recommendations
 
-## 1. Dependecies
+## 1. Dependencies
 
 For VitePress, you're gonna need:
 
@@ -58,7 +58,7 @@ sudo apt install nodejs npm
 
 ## 2. Installing and initializing VitePress
 
-## 2.1 Installing VitePress, obviously
+### 2.1 Installing VitePress, obviously
 
 From the docs, you can install VitePress using Node.js package managers:
 
@@ -68,7 +68,7 @@ For most users, use `npm`:
 npm add -D vitepress@next
 ```
 
-## 2.2 Initializing VitePress
+### 2.2 Initializing VitePress
 
 Initialize VitePress with `npx vitepress init`:
 
