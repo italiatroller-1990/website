@@ -79,6 +79,7 @@ onUnmounted(() => {
         type="text"
         class="tag-search-input"
         placeholder="Search tags or content..."
+        aria-label="Search tags"
         @input="updateSearch"
       />
     </div>

@@ -2,7 +2,8 @@ import { defineConfig } from 'vitepress'
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
-  appearance: false,
+  appearance: 'dark',
+  lang: 'en',
   title: "Italia Troller's website",
   description: "My personal site for blogs and stuff!",
   head: [
@@ -12,7 +13,7 @@ export default defineConfig({
         native_language_names: true,
         detect_browser_language: true,
         wrapper_selector: ".gtranslate_wrapper",
-        color_scheme: "light",
+        color_scheme: "dark",
         flag_style: "2d",
         flag_size: 24,
         position: "bottom-right",

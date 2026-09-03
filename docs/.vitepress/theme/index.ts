@@ -1,5 +1,5 @@
 // https://vitepress.dev/guide/custom-theme
-import { h, onMounted } from 'vue'
+import { h } from 'vue'
 import type { Theme } from 'vitepress'
 import DefaultTheme from 'vitepress/theme'
 import BlogList from './components/BlogList.vue'
@@ -15,9 +15,7 @@ function initDarkModeGTranslate() {
       window.gtranslateSettings.color_scheme = isDark ? 'dark' : 'light'
     }
   }
-  // Initial sync
   updateGTranslateTheme()
-  // Watch for class changes on <html>
   const observer = new MutationObserver(updateGTranslateTheme)
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
 }
@@ -37,11 +35,5 @@ export default {
   },
   mounted() {
     initDarkModeGTranslate()
-    
-    if (typeof document !== 'undefined') {
-      const html = document.documentElement
-      html.setAttribute('role', 'main')
-      html.setAttribute('aria-label', 'Main content')
-    }
   },
 } satisfies Theme

@@ -250,7 +250,7 @@ font font {
   vertical-align: middle !important;
   display: inline-block !important;
   width: 28px !important;
-  height: auto !important;
+  height: 24px !important;
   margin: 0 6px 0 0 !important;
   border-radius: 3px !important;
 }
@@ -345,6 +345,38 @@ span.gt_float_switcher-arrow.gt_arrow_rotate {
 .gt_float_switcher .gt_options::-webkit-scrollbar-thumb {
   background-color: var(--vp-c-brand-1) !important;
   border-radius: 3px !important;
+}
+
+/* --------------------------------------------------------------------------
+ * Focus styles
+ * -------------------------------------------------------------------------- */
+
+:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+}
+
+.blog-card:focus-visible {
+  border-color: var(--vp-c-brand-1);
+  box-shadow: 0 0 0 2px var(--vp-c-brand-soft);
+}
+
+.tag-card:focus-visible {
+  border-color: var(--vp-c-brand-1);
+  box-shadow: 0 0 0 2px var(--vp-c-brand-soft);
+}
+
+.giscus-load-btn:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+  border-color: var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
+}
+
+.tag-search-input:focus-visible {
+  outline: none;
+  border-color: var(--vp-c-brand-1);
+  box-shadow: 0 0 0 2px var(--vp-c-brand-soft);
 }
 
 /* --------------------------------------------------------------------------
