@@ -11,6 +11,10 @@ tags:
 
 ### {{ new Date($frontmatter.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) }}
 
+<div v-if="$frontmatter.tags" class="blog-post-tags">
+  <a v-for="tag in $frontmatter.tags" :key="tag" :href="`/tags/${encodeURIComponent(tag)}/`" class="blog-post-tag">#{{ tag }}</a>
+</div>
+
 I just switched to VitePress and the experience is incredible, easy formatting, hero sections, ...all I needed!
 
 ...and it's so good that I could say that it's the best SSG ever too!

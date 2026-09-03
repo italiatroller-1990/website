@@ -32,6 +32,15 @@ function formatDate(dateStr: string) {
       <h2 class="blog-card-title">{{ post.title }}</h2>
       <time v-if="post.date" class="blog-card-date">{{ formatDate(post.date) }}</time>
       <p v-if="post.description" class="blog-card-desc">{{ post.description }}</p>
+      <div v-if="post.tags && post.tags.length" class="blog-card-tags">
+        <a
+          v-for="tag in post.tags"
+          :key="tag"
+          :href="`/tags/${encodeURIComponent(tag)}/`"
+          class="blog-card-tag"
+          @click.stop
+        >#{{ tag }}</a>
+      </div>
     </a>
   </div>
 </template>

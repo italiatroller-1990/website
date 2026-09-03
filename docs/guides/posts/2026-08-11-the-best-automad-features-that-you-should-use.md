@@ -14,6 +14,10 @@ tags:
 
 ### {{ new Date($frontmatter.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) }}
 
+<div v-if="$frontmatter.tags" class="blog-post-tags">
+  <a v-for="tag in $frontmatter.tags" :key="tag" :href="`/tags/${encodeURIComponent(tag)}/`" class="blog-post-tag">#{{ tag }}</a>
+</div>
+
 
 
 At first, using Automad feels awkward, but that's because you haven't learned enough. In this guide, I will show you the best features of Automad.

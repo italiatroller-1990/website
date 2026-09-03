@@ -31,6 +31,7 @@ export default defineConfig({
       { text: 'Welcome!', link: '/' },
       { text: 'Lifelogs', link: '/lifelogs/' },
       { text: 'Guides', link: '/guides/' },
+      { text: 'Tags', link: '/tags/' },
       { text: 'About me', link: '/about' },
       { text: 'Contact me', link: '/contact' }
     ],

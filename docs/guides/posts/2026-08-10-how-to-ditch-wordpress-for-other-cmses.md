@@ -14,6 +14,10 @@ tags:
 
 ### {{ new Date($frontmatter.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) }}
 
+<div v-if="$frontmatter.tags" class="blog-post-tags">
+  <a v-for="tag in $frontmatter.tags" :key="tag" :href="`/tags/${encodeURIComponent(tag)}/`" class="blog-post-tag">#{{ tag }}</a>
+</div>
+
 
 
 WordPress is one of the most popular CMSes out here, and it's running a majority of the web. Back then, people told you to get your LAMP stack working on a host or use a free host and create your website on WordPress.

@@ -488,3 +488,113 @@ span.gt_float_switcher-arrow.gt_arrow_rotate {
 .giscus-wrapper {
   font-family: var(--vp-font-family-base);
 }
+
+/* --------------------------------------------------------------------------
+ * Tags
+ * -------------------------------------------------------------------------- */
+
+.tags-page {
+  padding: 1.5rem 0;
+}
+
+.tags-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.tag-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.5rem 1rem;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  background: var(--blog-card-bg);
+  text-decoration: none;
+  color: inherit;
+  transition:
+    border-color 0.25s,
+    box-shadow 0.25s,
+    background-color 0.25s;
+}
+
+.tag-card:hover {
+  border-color: var(--vp-c-brand-1);
+  background: var(--blog-card-hover);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+}
+
+.tag-card-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--vp-c-brand-1);
+}
+
+.tag-card-count {
+  font-size: 0.85rem;
+  color: var(--vp-c-text-3);
+}
+
+.tag-posts {
+  padding: 1.5rem 0;
+}
+
+.tag-posts-header {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.tag-posts-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.75rem;
+  color: var(--vp-c-text-1);
+}
+
+.tag-hash {
+  color: var(--vp-c-brand-1);
+}
+
+.tag-posts-count {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--vp-c-text-3);
+}
+
+/* Card tags */
+.blog-card-tags,
+.blog-post-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.blog-card-tag,
+.blog-post-tag {
+  display: inline-block;
+  font-size: 0.8rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  text-decoration: none;
+  transition: background-color 0.2s;
+}
+
+.blog-card-tag:hover,
+.blog-post-tag:hover {
+  background: var(--vp-c-brand-1);
+  color: var(--vp-c-white);
+}
+
+.blog-card-section {
+  display: inline-block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--vp-c-text-3);
+  margin-bottom: 0.25rem;
+}

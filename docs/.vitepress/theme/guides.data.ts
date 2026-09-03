@@ -9,7 +9,8 @@ export default createContentLoader('guides/posts/*.md', {
         title: page.frontmatter.title,
         date: page.frontmatter.date,
         description: page.frontmatter.description,
-        url: page.url
+        url: page.url,
+        tags: page.frontmatter.tags || []
       }))
   }
 })
