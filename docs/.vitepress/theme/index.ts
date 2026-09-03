@@ -1,5 +1,5 @@
 // https://vitepress.dev/guide/custom-theme
-import { h } from 'vue'
+import { h, onMounted } from 'vue'
 import type { Theme } from 'vitepress'
 import DefaultTheme from 'vitepress/theme'
 import BlogList from './components/BlogList.vue'
@@ -37,5 +37,11 @@ export default {
   },
   mounted() {
     initDarkModeGTranslate()
+    
+    if (typeof document !== 'undefined') {
+      const html = document.documentElement
+      html.setAttribute('role', 'main')
+      html.setAttribute('aria-label', 'Main content')
+    }
   },
 } satisfies Theme
