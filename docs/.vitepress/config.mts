@@ -3,6 +3,7 @@ import { defineConfig } from 'vitepress'
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   appearance: false,
+  cleanUrls: true,
   lang: 'en',
   title: "Italia Troller's website",
   description: "My personal site for blogs and stuff!",
