@@ -42,25 +42,13 @@ if [ -f "$FILE" ]; then
   exit 1
 fi
 
-TAG_ARRAY=""
-if [ -n "$TAGS" ]; then
-  TAG_ARRAY=$(echo "$TAGS" | awk -F',' '{
-    for (i=1; i<=NF; i++) {
-      gsub(/^[ \t]+|[ \t]+$/, "", $i)
-      if ($i != "") printf "  - %s\n", $i
-    }
-  }')
-else
-  TAG_ARRAY="  - "
-fi
-
 cat > "$FILE" << TEMPLATE
 ---
 title: TITLE_PLACEHOLDER
 date: DATE_PLACEHOLDER
 description: ""
 tags:
-TAG_ARRAY_PLACEHOLDER
+TAGS_PLACEHOLDER
 ---
 
 # {{ \$frontmatter.title }}
@@ -71,6 +59,20 @@ TEMPLATE
 
 sed -i "s|TITLE_PLACEHOLDER|${TITLE}|" "$FILE"
 sed -i "s|DATE_PLACEHOLDER|${DATE}|" "$FILE"
-sed -i "s|TAG_ARRAY_PLACEHOLDER|${TAG_ARRAY}|" "$FILE"
+
+TAG_LINES=""
+if [ -n "$TAGS" ]; then
+  TAG_LINES=$(printf '%s\n' "$TAGS" | awk -F',' '{
+    for (i=1; i<=NF; i++) {
+      gsub(/^[ \t]+|[ \t]+$/, "", $i)
+      if ($i != "") printf "  - %s\n", $i
+    }
+  }')
+else
+  TAG_LINES="  - "
+fi
+
+# Replace the placeholder with actual tag lines
+sed -i "/TAGS_PLACEHOLDER/c\\${TAG_LINES}" "$FILE"
 
 echo "Created: ${FILE}"
