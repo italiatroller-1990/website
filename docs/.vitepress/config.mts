@@ -52,5 +52,9 @@ export default defineConfig({
       { icon: 'x', link: 'https://x.com/Italia_Troller_' },
       { icon: 'bluesky', link: 'https://bsky.app/profile/italiatroller.dpdns.org' }
     ]
+  },
+
+  markdown: {
+    theme: 'github-dark'
   }
 })
