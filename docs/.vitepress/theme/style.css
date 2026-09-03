@@ -18,17 +18,17 @@
   --vp-c-divider: #e6e4e1;
   --vp-c-gutter: #d9d7d4;
 
-  /* Ayu green */
-  --vp-c-brand-1: #4ad26c;
-  --vp-c-brand-2: #38b15a;
-  --vp-c-brand-3: #299f49;
-  --vp-c-brand-soft: rgba(74, 210, 108, 0.14);
+  /* Ayu blue */
+  --vp-c-brand-1: #36a3d6;
+  --vp-c-brand-2: #2a8bc7;
+  --vp-c-brand-3: #1e7ab7;
+  --vp-c-brand-soft: rgba(54, 163, 214, 0.14);
 
   /* Semantic colors */
-  --vp-c-tip-1: #4ad26c;
-  --vp-c-tip-2: #38b15a;
-  --vp-c-tip-3: #299f49;
-  --vp-c-tip-soft: rgba(74, 210, 108, 0.14);
+  --vp-c-tip-1: #36a3d6;
+  --vp-c-tip-2: #2a8bc7;
+  --vp-c-tip-3: #1e7ab7;
+  --vp-c-tip-soft: rgba(54, 163, 214, 0.14);
 
   --vp-c-warning-1: #ff9f24;
   --vp-c-warning-2: #e59200;
@@ -52,51 +52,51 @@
   /* Buttons */
   --vp-button-brand-border: transparent;
   --vp-button-brand-text: #fef9f0;
-  --vp-button-brand-bg: #4ad26c;
+  --vp-button-brand-bg: #36a3d6;
 
   --vp-button-brand-hover-border: transparent;
   --vp-button-brand-hover-text: #fef9f0;
-  --vp-button-brand-hover-bg: #38b15a;
+  --vp-button-brand-hover-bg: #2a8bc7;
 
   --vp-button-brand-active-border: transparent;
   --vp-button-brand-active-text: #fef9f0;
-  --vp-button-brand-active-bg: #299f49;
+  --vp-button-brand-active-bg: #1e7ab7;
 
   /* Custom blocks */
   --vp-custom-block-tip-border: transparent;
   --vp-custom-block-tip-text: #08060b;
-  --vp-custom-block-tip-bg: rgba(74, 210, 108, 0.14);
-  --vp-custom-block-tip-code-bg: rgba(74, 210, 108, 0.18);
+  --vp-custom-block-tip-bg: rgba(54, 163, 214, 0.14);
+  --vp-custom-block-tip-code-bg: rgba(54, 163, 214, 0.18);
 
   /* Hero */
-  --vp-home-hero-name-color: #4ad26c;
+  --vp-home-hero-name-color: #36a3d6;
   --vp-home-hero-name-background: linear-gradient(
     120deg,
-    #4ad26c,
-    #38b15a
+    #36a3d6,
+    #2a8bc7
   );
 
   --vp-home-hero-image-background-image: linear-gradient(
     -45deg,
-    rgba(74, 210, 108, 0.7),
-    rgba(56, 177, 90, 0.7)
+    rgba(54, 163, 214, 0.7),
+    rgba(42, 139, 199, 0.7)
   );
 
   --vp-home-hero-image-filter: blur(44px);
 
   /* Blog */
   --blog-card-bg: #f7f4ee;
-  --blog-card-hover: rgba(74, 210, 108, 0.12);
+  --blog-card-hover: rgba(54, 163, 214, 0.12);
   --blog-post-bg: #fef9f0;
 
   /* GTranslate */
   --gt-bg: #f7f4ee;
-  --gt-bg-selected: #4ad26c;
+  --gt-bg-selected: #36a3d6;
   --gt-text: #08060b;
   --gt-text-selected: #fef9f0;
   --gt-border: #e6e4e1;
-  --gt-hover-bg: rgba(74, 210, 108, 0.15);
-  --gt-hover-text: #38b15a;
+  --gt-hover-bg: rgba(54, 163, 214, 0.15);
+  --gt-hover-text: #2a8bc7;
 }
 
 /* Dark mode --------------------------------------------------------------- */
@@ -115,17 +115,17 @@
   --vp-c-divider: #4f4b54;
   --vp-c-gutter: #38343f;
 
-  /* Ayu hard green */
-  --vp-c-brand-1: #4ad26c;
-  --vp-c-brand-2: #5ce07b;
-  --vp-c-brand-3: #6ee58b;
-  --vp-c-brand-soft: rgba(74, 210, 108, 0.14);
+  /* Ayu hard blue */
+  --vp-c-brand-1: #5ca9ff;
+  --vp-c-brand-2: #7bc3ff;
+  --vp-c-brand-3: #a2d4ff;
+  --vp-c-brand-soft: rgba(92, 169, 255, 0.14);
 
   /* Semantic colors */
-  --vp-c-tip-1: #4ad26c;
-  --vp-c-tip-2: #5ce07b;
-  --vp-c-tip-3: #6ee58b;
-  --vp-c-tip-soft: rgba(74, 210, 108, 0.14);
+  --vp-c-tip-1: #5ca9ff;
+  --vp-c-tip-2: #7bc3ff;
+  --vp-c-tip-3: #a2d4ff;
+  --vp-c-tip-soft: rgba(92, 169, 255, 0.14);
 
   --vp-c-warning-1: #ff9f24;
   --vp-c-warning-2: #ffb01f;
@@ -149,51 +149,51 @@
   /* Buttons */
   --vp-button-brand-border: transparent;
   --vp-button-brand-text: #06040a;
-  --vp-button-brand-bg: #4ad26c;
+  --vp-button-brand-bg: #5ca9ff;
 
   --vp-button-brand-hover-border: transparent;
   --vp-button-brand-hover-text: #06040a;
-  --vp-button-brand-hover-bg: #5ce07b;
+  --vp-button-brand-hover-bg: #7bc3ff;
 
   --vp-button-brand-active-border: transparent;
   --vp-button-brand-active-text: #06040a;
-  --vp-button-brand-active-bg: #6ee58b;
+  --vp-button-brand-active-bg: #a2d4ff;
 
   /* Custom blocks */
   --vp-custom-block-tip-border: transparent;
   --vp-custom-block-tip-text: #cfcfcf;
-  --vp-custom-block-tip-bg: rgba(74, 210, 108, 0.14);
-  --vp-custom-block-tip-code-bg: rgba(74, 210, 108, 0.18);
+  --vp-custom-block-tip-bg: rgba(92, 169, 255, 0.14);
+  --vp-custom-block-tip-code-bg: rgba(92, 169, 255, 0.18);
 
   /* Hero */
-  --vp-home-hero-name-color: #4ad26c;
+  --vp-home-hero-name-color: #5ca9ff;
   --vp-home-hero-name-background: linear-gradient(
     120deg,
-    #4ad26c,
-    #5ce07b
+    #5ca9ff,
+    #7bc3ff
   );
 
   --vp-home-hero-image-background-image: linear-gradient(
     -45deg,
-    rgba(74, 210, 108, 0.55),
-    rgba(92, 224, 123, 0.55)
+    rgba(92, 169, 255, 0.55),
+    rgba(123, 195, 255, 0.55)
   );
 
   --vp-home-hero-image-filter: blur(56px);
 
   /* Blog */
   --blog-card-bg: #0d0b12;
-  --blog-card-hover: rgba(74, 210, 108, 0.12);
+  --blog-card-hover: rgba(92, 169, 255, 0.12);
   --blog-post-bg: #06040a;
 
   /* GTranslate */
   --gt-bg: #0d0b12;
-  --gt-bg-selected: #4ad26c;
+  --gt-bg-selected: #5ca9ff;
   --gt-text: #cfcfcf;
   --gt-text-selected: #06040a;
   --gt-border: #4f4b54;
-  --gt-hover-bg: rgba(74, 210, 108, 0.16);
-  --gt-hover-text: #5ce07b;
+  --gt-hover-bg: rgba(92, 169, 255, 0.16);
+  --gt-hover-text: #7bc3ff;
 }
 
 /* --------------------------------------------------------------------------
@@ -334,7 +334,7 @@ font font {
 .gt_float_switcher {
   font-family: var(--vp-font-family-base) !important;
   font-size: 14px !important;
-  border-radius: 10px !important;
+  border-radius: 20px !important;
   color: var(--gt-text) !important;
   display: inline-block !important;
   line-height: 20px !important;
@@ -351,7 +351,7 @@ font font {
   width: 28px !important;
   height: auto !important;
   margin: 0 6px 0 0 !important;
-  border-radius: 3px !important;
+  border-radius: 10px !important;
 }
 
 .gt_float_switcher .gt-selected {
@@ -362,7 +362,7 @@ font font {
   text-transform: uppercase !important;
   overflow: hidden !important;
   text-align: left !important;
-  border-radius: 10px !important;
+  border-radius: 20px !important;
 }
 
 .gt_float_switcher .gt-selected .gt-current-lang {
@@ -404,7 +404,7 @@ span.gt_float_switcher-arrow.gt_arrow_rotate {
   cursor: pointer !important;
   transition: all 0.4s cubic-bezier(0.3, 1.1, 0.4, 1.1) !important;
   background: var(--gt-bg) !important;
-  border-radius: 0 0 10px 10px !important;
+  border-radius: 20px !important;
 }
 
 .gt_float_switcher .gt_options a {
@@ -443,7 +443,7 @@ span.gt_float_switcher-arrow.gt_arrow_rotate {
 
 .gt_float_switcher .gt_options::-webkit-scrollbar-thumb {
   background-color: var(--vp-c-brand-1) !important;
-  border-radius: 3px !important;
+  border-radius: 20px !important;
 }
 
 /* --------------------------------------------------------------------------
