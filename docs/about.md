@@ -12,7 +12,7 @@ features:
 
   - icon: 🤓
     title: My interests!
-    details: "- Rare/niche tech<br>- Immersive sims<br>- Self-hosting<br>- Markdown (because yes)<br>- Game engine experiments (also because Y E S)"
+    details: "- Rare/niche tech<br>- Immersive sims<br>- Self-hosting<br>- Markdown (because yes)<br>- Game engine experiments (also because Y E S)<br>- LLM experiments"
 
   - icon: 🌐
     title: About this site!
