@@ -163,6 +163,14 @@
   line-height: 1.5;
 }
 
+.blog-card-image {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+}
+
 /* --------------------------------------------------------------------------
  * Blog Post
  * -------------------------------------------------------------------------- */
@@ -458,7 +466,7 @@ span.gt_float_switcher-arrow.gt_arrow_rotate {
 }
 
 .tag-posts {
-  padding: 1.5rem 0;
+  padding: 3rem 1rem;
 }
 
 .tag-posts-header {

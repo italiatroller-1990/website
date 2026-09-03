@@ -4,9 +4,11 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   appearance: false,
   cleanUrls: true,
+  hostname: 'https://italiatroller.dpdns.org',
   lang: 'en',
   title: "Italia Troller's website",
   description: "My personal site for blogs and stuff!",
+  lastUpdated: true,
   head: [
     ['script', {}, `
       window.gtranslateSettings = {
@@ -55,6 +57,9 @@ export default defineConfig({
   },
 
   markdown: {
-    theme: 'github-dark'
+    theme: 'github-dark',
+    image: {
+      lazyLoading: true
+    }
   }
 })

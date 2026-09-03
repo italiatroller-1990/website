@@ -4,6 +4,7 @@ date: 2026-08-03
 description: "A grainy zoomed-in photo from my Samsung Galaxy 8a."
 tags:
   - Photography
+image: /assets/images/lifelog/just-a-photo-from-my-8a/image-1785938220354.webp
 ---
 
 

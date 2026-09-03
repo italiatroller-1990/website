@@ -29,6 +29,7 @@ function formatDate(dateStr: string) {
       :href="post.url"
       class="blog-card"
     >
+      <img v-if="post.image" :src="post.image" alt="" class="blog-card-image" loading="lazy" />
       <h2 class="blog-card-title">{{ post.title }}</h2>
       <time v-if="post.date" class="blog-card-date">{{ formatDate(post.date) }}</time>
       <p v-if="post.description" class="blog-card-desc">{{ post.description }}</p>

@@ -6,6 +6,7 @@ tags:
   - Automad CMS
   - Tech
   - Web
+image: /assets/images/guides/the-best-automad-features/image-1785568428118.webp
 ---
 
 

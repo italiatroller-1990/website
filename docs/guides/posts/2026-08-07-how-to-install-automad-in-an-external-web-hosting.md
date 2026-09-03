@@ -7,6 +7,7 @@ tags:
   - Server
   - Tech
   - Web
+image: /assets/images/guides/how-to-install-automad/image-1786032333725.webp
 ---
 
 
