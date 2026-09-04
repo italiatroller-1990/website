@@ -1,14 +1,17 @@
 name = "vitepress-translation-worker"
 main = "src/index.ts"
-compatibility_date = "2025-01-01"
+compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
-# Cache configuration
-[cache]
-binding = "TRANSLATION_CACHE"
+# Serve the VitePress build output as static assets.
+# serve_directly = true (default) means static assets are served
+# without invoking the Worker. Only non-asset requests (e.g. /vi/about)
+# reach the Worker for translation.
+[assets]
+directory = "../docs/.vitepress/dist"
+binding = "ASSETS"
 
-# Environment variables (non-secret)
+# Non-secret environment variables
 [vars]
-ORIGIN = "https://italiatroller.dpdns.org"
 MODEL = "riva-translate-4b-instruct-v2"
-CACHE_TTL_SECONDS = "604800" # 7 days
+CACHE_TTL = "604800"

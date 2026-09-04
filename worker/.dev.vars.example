@@ -1,7 +1,4 @@
-# Copy this file to .dev.vars and fill in your values
-# wrangler will automatically load .dev.vars for local development
+# Cloudflare Workers secrets (loaded by wrangler in local dev)
+# Copy this file to .dev.vars and fill in your values.
 
 NVIDIA_API_KEY=your_nvidia_api_key_here
-ORIGIN=http://localhost:5173
-MODEL=riva-translate-4b-instruct-v2
-CACHE_TTL_SECONDS=604800

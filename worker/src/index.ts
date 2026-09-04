@@ -1,178 +1,193 @@
 /**
  * VitePress Translation Middleware for Cloudflare Workers
- * 
- * Dynamically translates English VitePress pages using NVIDIA Riva Translate 4B Instruct v2.
- * Caches translations to minimize API calls.
+ *
+ * Serves the static VitePress output via the ASSETS binding.
+ * Intercepts requests with a language prefix, fetches the canonical
+ * English page, translates it via NVIDIA Riva, caches, and serves.
  */
 
-// Supported language codes - keep in sync with VitePress theme/languages.ts
-const SUPPORTED_LANGUAGES = new Set([
-  'vi', 'es', 'fr', 'de', 'ja', 'ko', 'zh', 'pt', 'ru', 'ar', 'hi', 'th', 'id', 'ms', 'tr', 'pl', 'nl', 'sv', 'da', 'no', 'fi', 'el', 'cs', 'ro', 'hu', 'uk', 'he', 'bg', 'hr', 'sk', 'sl'
-])
+import { getLanguageByCode, type LanguageConfig } from './languages'
 
-// Language names for system prompt - keep in sync with VitePress theme/languages.ts
-const LANGUAGE_NAMES: Record<string, string> = {
-  'vi': 'Vietnamese',
-  'es': 'Spanish',
-  'fr': 'French',
-  'de': 'German',
-  'ja': 'Japanese',
-  'ko': 'Korean',
-  'zh': 'Chinese',
-  'pt': 'Portuguese',
-  'ru': 'Russian',
-  'ar': 'Arabic',
-  'hi': 'Hindi',
-  'th': 'Thai',
-  'id': 'Indonesian',
-  'ms': 'Malay',
-  'tr': 'Turkish',
-  'pl': 'Polish',
-  'nl': 'Dutch',
-  'sv': 'Swedish',
-  'da': 'Danish',
-  'no': 'Norwegian',
-  'fi': 'Finnish',
-  'el': 'Greek',
-  'cs': 'Czech',
-  'ro': 'Romanian',
-  'hu': 'Hungarian',
-  'uk': 'Ukrainian',
-  'he': 'Hebrew',
-  'bg': 'Bulgarian',
-  'hr': 'Croatian',
-  'sk': 'Slovak',
-  'sl': 'Slovenian',
-}
-
-// System prompt for NVIDIA Riva
-const SYSTEM_PROMPT_TEMPLATE = `You are a professional technical translator for a VitePress documentation website. Translate the following HTML content from English to the target language.
-
-CRITICAL RULES:
-1. Preserve ALL HTML tags, attributes, and structure exactly as they appear
-2. Preserve Markdown formatting within HTML (headings, lists, code blocks, links, etc.)
-3. NEVER translate URLs, link destinations, file paths, code blocks, inline code, or technical identifiers
-4. NEVER translate package names, commands, API names, configuration keys, version numbers, or technical terms
-5. Preserve HTML and Vue/VitePress components and their attributes
-6. Preserve frontmatter keys and structure
-7. Do NOT summarize, explain, expand, or omit content
-8. Return ONLY the translated content with the same HTML structure
-9. Maintain the author's original tone and level of formality
-10. Use natural, appropriate technical terminology for the target language
-
-Target language: {LANG}
-Language name: {LANG_NAME}`
+// ── Env ─────────────────────────────────────────────────────────────────────
 
 interface Env {
-  TRANSLATION_CACHE: Cache
+  ASSETS: Fetcher
   NVIDIA_API_KEY: string
-  ORIGIN: string
   MODEL: string
-  CACHE_TTL_SECONDS: string
+  CACHE_TTL: string
 }
 
-interface TranslationRequest {
-  content: string
-  lang: string
-  langName: string
-}
+// ── Constants ───────────────────────────────────────────────────────────────
 
-interface CachedTranslation {
-  html: string
-  timestamp: number
-  lang: string
-}
+const RIVA_ENDPOINT = 'https://integrate.api.nvidia.com/v1/chat/completions'
+const DEFAULT_MODEL = 'riva-translate-4b-instruct-v2'
+const DEFAULT_CACHE_TTL = 604800 // 7 days
+const CACHE_NAMESPACE = 'vitepress-translations'
+
+const SYSTEM_PROMPT = `You are a professional technical translator for a VitePress documentation website.
+
+Translate the content from English to the target language.
+
+RULES:
+1. The input contains two sections: [TITLE] and [HTML_CONTENT]
+2. Return ONLY two sections in the same format: [TITLE] and [HTML_CONTENT]
+3. Preserve ALL HTML tags, attributes, and structure exactly
+4. NEVER translate URLs, link hrefs, file paths, code blocks, inline code, or technical identifiers
+5. NEVER translate package names, commands, API names, config keys, version numbers, class names, or id attributes
+6. Preserve all data-v-*, class, id, href, src, alt, aria-*, tabindex, and style attributes unchanged
+7. Do NOT summarize, explain, expand, or omit any content
+8. Maintain the original tone and level of formality
+9. Use natural, appropriate technical terminology for the target language
+
+Target language: {LANG_NAME} ({LANG_CODE})`
+
+// ── Content extraction ──────────────────────────────────────────────────────
 
 /**
- * Generate cache key from URL, language, and content hash
+ * Extract the inner content of the first `<div class="vp-doc …">` using
+ * accurate div-nesting depth tracking. Returns the HTML *before* the
+ * opening tag, the inner content, and everything from the matching
+ * `</div>` onward.
  */
-function getCacheKey(url: string, lang: string, contentHash: string): string {
-  return `translate:${lang}:${url}:${contentHash}`
-}
+function extractVpDoc(
+  html: string,
+): { before: string; inner: string; after: string } | null {
+  const marker = html.indexOf('class="vp-doc')
+  if (marker === -1) return null
 
-/**
- * Generate SHA-256 hash of content for cache invalidation
- */
-async function hashContent(content: string): Promise<string> {
-  const encoder = new TextEncoder()
-  const data = encoder.encode(content)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-}
+  // Walk back to the opening <div
+  const tagStart = html.lastIndexOf('<div', marker)
+  if (tagStart === -1) return null
 
-/**
- * Extract main content from VitePress HTML
- * Returns the content inside the .vp-doc container
- */
-function extractContent(html: string): { content: string; title: string } | null {
-  try {
-    // Extract title
-    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-    const title = titleMatch ? titleMatch[1].replace(/\|.*$/, '').trim() : ''
+  // End of the opening tag (past the >)
+  let tagEnd = html.indexOf('>', marker)
+  if (tagEnd === -1) return null
+  tagEnd += 1
 
-    // Extract main content area - VitePress uses .vp-doc for the main content
-    // The structure is typically: <div class="vp-doc container">...content...</div>
-    const contentMatch = html.match(
-      /<div[^>]+class="[^"]*vp-doc[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>\s*<!--\]-->/i
-    )
+  // Walk forward counting div nesting
+  let depth = 1
+  let pos = tagEnd
+  while (depth > 0 && pos < html.length) {
+    const nextOpen = html.indexOf('<div', pos)
+    const nextClose = html.indexOf('</div>', pos)
 
-    if (contentMatch) {
-      return { content: contentMatch[1], title }
+    if (nextClose === -1) return null // malformed
+
+    if (nextOpen !== -1 && nextOpen < nextClose) {
+      // Verify it is a real opening <div (not inside an attribute or comment)
+      const ch = html.charCodeAt(nextOpen + 4)
+      if (ch === 0x20 || ch === 0x3e || ch === 0x0a || ch === 0x0d || ch === 0x09) {
+        depth++
+      }
+      pos = nextOpen + 4
+    } else {
+      depth--
+      if (depth === 0) {
+        return {
+          before: html.substring(0, tagEnd),
+          inner: html.substring(tagEnd, nextClose),
+          after: html.substring(nextClose),
+        }
+      }
+      pos = nextClose + 6 // '</div>'.length
     }
-
-    // Fallback: try to find any div with vp-doc class
-    const fallbackMatch = html.match(/<div[^>]+class="[^"]*vp-doc[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
-    if (fallbackMatch) {
-      return { content: fallbackMatch[1], title }
-    }
-
-    return null
-  } catch (e) {
-    console.error('Error extracting content:', e)
-    return null
   }
+  return null
 }
 
 /**
- * Replace content in VitePress HTML
+ * Re-assemble the full page from the extraction parts, replacing inner
+ * content with a translated version.
  */
-function replaceContent(html: string, newContent: string): string {
-  // Replace the content inside the vp-doc div
+function replaceVpDocInner(
+  before: string,
+  inner: string,
+  after: string,
+): string {
+  return before + inner + after
+}
+
+// ── Title extraction ────────────────────────────────────────────────────────
+
+function extractTitle(html: string): string {
+  const m = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+  return m ? m[1].trim() : ''
+}
+
+function replaceTitle(html: string, newTitle: string): string {
   return html.replace(
-    /(<div[^>]+class="[^"]*vp-doc[^"]*"[^>]*>)([\s\S]*?)(<\/div>\s*<\/div>\s*<\/div>\s*<!--\]-->)/i,
-    `$1${newContent}$3`
+    /(<title[^>]*>)([^<]*)(<\/title>)/i,
+    `$1${newTitle}$3`,
   )
 }
 
-/**
- * Call NVIDIA Riva API to translate content
- */
-async function translateWithRiva(
-  content: string,
+// ── Meta description ────────────────────────────────────────────────────────
+
+function extractMetaDescription(html: string): string {
+  const m = html.match(
+    /<meta\s+name="description"\s+content="([^"]*)"/i,
+  )
+  return m ? m[1] : ''
+}
+
+function replaceMetaDescription(html: string, newDesc: string): string {
+  return html.replace(
+    /(<meta\s+name="description"\s+content=")([^"]*")/i,
+    `$1${newDesc}$2`,
+  )
+}
+
+// ── Cache ───────────────────────────────────────────────────────────────────
+
+async function contentHash(text: string): Promise<string> {
+  const data = new TextEncoder().encode(text)
+  const buf = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 16) // 16 hex chars ≈ 64 bits — enough for change detection
+}
+
+function cacheKey(
   lang: string,
-  langName: string,
-  env: Env
-): Promise<string> {
-  if (!env.NVIDIA_API_KEY) {
-    throw new Error('NVIDIA_API_KEY is not configured')
-  }
+  canonicalPath: string,
+  hash: string,
+): string {
+  return `${CACHE_NAMESPACE}:${lang}:${canonicalPath}:${hash}`
+}
 
-  const systemPrompt = SYSTEM_PROMPT_TEMPLATE
-    .replace('{LANG}', lang)
-    .replace('{LANG_NAME}', langName)
+// ── NVIDIA Riva ─────────────────────────────────────────────────────────────
 
-  const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+interface TranslationPayload {
+  title: string
+  content: string
+}
+
+async function translateViaRiva(
+  title: string,
+  content: string,
+  langConfig: LanguageConfig,
+  env: Env,
+): Promise<TranslationPayload> {
+  const model = env.MODEL || DEFAULT_MODEL
+  const systemPrompt = SYSTEM_PROMPT
+    .replace('{LANG_NAME}', langConfig.name)
+    .replace('{LANG_CODE}', langConfig.rivaCode)
+
+  const userMessage =
+    `[TITLE]\n${title}\n[/TITLE]\n\n[HTML_CONTENT]\n${content}\n[/HTML_CONTENT]`
+
+  const res = await fetch(RIVA_ENDPOINT, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${env.NVIDIA_API_KEY}`,
+      Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: env.MODEL || 'riva-translate-4b-instruct-v2',
+      model,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: content },
+        { role: 'user', content: userMessage },
       ],
       temperature: 0.2,
       max_tokens: 8192,
@@ -180,167 +195,170 @@ async function translateWithRiva(
     }),
   })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    console.error('NVIDIA API error:', response.status, errorText)
-    throw new Error(`Translation API error: ${response.status}`)
+  if (!res.ok) {
+    const err = await res.text().catch(() => '')
+    throw new Error(`Riva ${res.status}: ${err.slice(0, 200)}`)
   }
 
-  const data = await response.json() as any
-  const translated = data.choices?.[0]?.message?.content
+  const json = (await res.json()) as any
+  const raw: string = json.choices?.[0]?.message?.content ?? ''
+  if (!raw) throw new Error('Empty Riva response')
 
-  if (!translated || typeof translated !== 'string') {
-    throw new Error('Empty or invalid translation response')
-  }
-
-  return translated.trim()
+  return parseTranslationResponse(raw, title, content)
 }
 
-/**
- * Main request handler
- */
+function parseTranslationResponse(
+  raw: string,
+  fallbackTitle: string,
+  fallbackContent: string,
+): TranslationPayload {
+  const titleMatch = raw.match(/\[TITLE\]\s*([\s\S]*?)\s*\[\/TITLE\]/)
+  const contentMatch = raw.match(
+    /\[HTML_CONTENT\]\s*([\s\S]*?)\s*\[\/HTML_CONTENT\]/,
+  )
+
+  return {
+    title: titleMatch ? titleMatch[1].trim() : fallbackTitle,
+    content: contentMatch ? contentMatch[1].trim() : fallbackContent,
+  }
+}
+
+// ── Handler ─────────────────────────────────────────────────────────────────
+
+async function handleTranslation(
+  request: Request,
+  env: Env,
+  canonicalPath: string,
+  langConfig: LanguageConfig,
+): Promise<Response> {
+  // 1. Fetch the canonical English page from assets
+  const assetUrl = new URL(canonicalPath, request.url)
+  // Append .html extension for cleanUrls compatibility
+  // The ASSETS binding with auto-trailing-slash handles both
+  // /about and /about.html, but being explicit avoids redirects.
+  const assetRes = await env.ASSETS.fetch(assetUrl.href)
+
+  if (!assetRes.ok) {
+    // Page does not exist in English — pass through the 404
+    return assetRes
+  }
+
+  const englishHtml = await assetRes.text()
+
+  // 2. Check translation cache
+  const hash = await contentHash(englishHtml)
+  const ck = cacheKey(langConfig.code, canonicalPath, hash)
+
+  const cache = await caches.open(CACHE_NAMESPACE)
+  const cached = await cache.match(new Request(`https://cache.internal/${ck}`))
+  if (cached) {
+    const resp = new Response(cached.body, cached)
+    resp.headers.set('X-Translation-Cache', 'HIT')
+    resp.headers.set('X-Translation-Language', langConfig.code)
+    return resp
+  }
+
+  // 3. Extract translatable parts
+  const extracted = extractVpDoc(englishHtml)
+  const title = extractTitle(englishHtml)
+  const metaDesc = extractMetaDescription(englishHtml)
+
+  // If there is nothing to translate (e.g. empty vp-doc), just serve English
+  if (!extracted || (!extracted.inner.trim() && !title)) {
+    return new Response(englishHtml, {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    })
+  }
+
+  // 4. Translate
+  let translated: TranslationPayload
+  try {
+    translated = await translateViaRiva(
+      title,
+      extracted.inner,
+      langConfig,
+      env,
+    )
+  } catch (err) {
+    console.error(
+      `[translate] ${langConfig.code} ${canonicalPath}:`,
+      err instanceof Error ? err.message : err,
+    )
+    // Fallback: serve English
+    return new Response(englishHtml, {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'X-Translation-Status': 'error-fallback',
+      },
+    })
+  }
+
+  // 5. Re-assemble HTML
+  let output = replaceVpDocInner(
+    extracted.before,
+    translated.content,
+    extracted.after,
+  )
+  output = replaceTitle(output, translated.title)
+  if (metaDesc) {
+    output = replaceMetaDescription(output, translated.title)
+  }
+
+  // 6. Cache the result
+  const ttl = parseInt(env.CACHE_TTL || String(DEFAULT_CACHE_TTL), 10)
+  const cacheResponse = new Response(output, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': `public, max-age=${ttl}`,
+    },
+  })
+  await cache.put(
+    new Request(`https://cache.internal/${ck}`),
+    cacheResponse.clone(),
+  )
+
+  // 7. Return
+  const resp = new Response(output, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'X-Translation-Cache': 'MISS',
+      'X-Translation-Language': langConfig.code,
+    },
+  })
+  return resp
+}
+
+// ── Main entry point ────────────────────────────────────────────────────────
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
     const path = url.pathname
 
-    // Health check endpoint
+    // Health check
     if (path === '/health') {
-      return new Response(
-        JSON.stringify({ status: 'ok', service: 'vitepress-translation-worker' }),
-        {
-          headers: { 'Content-Type': 'application/json' },
-        }
-      )
+      return Response.json({ status: 'ok', service: 'vitepress-translation' })
     }
 
-    // Check if this is a translation request (has language prefix)
-    const pathParts = path.split('/').filter(Boolean)
-    if (pathParts.length === 0) {
-      // No language prefix, pass through to origin
-      return fetch(request)
+    // Parse first path segment
+    const segments = path.split('/').filter(Boolean)
+    if (segments.length === 0) {
+      // Root — serve English from assets
+      return env.ASSETS.fetch(request)
     }
 
-    const lang = pathParts[0]
+    const firstSegment = segments[0]
+    const langConfig = getLanguageByCode(firstSegment)
 
-    // Check if language is supported
-    if (!SUPPORTED_LANGUAGES.has(lang)) {
-      // Not a translation request, pass through
-      return fetch(request)
+    if (!langConfig) {
+      // Not a language prefix — serve static asset
+      return env.ASSETS.fetch(request)
     }
 
-    // This is a translation request
-    const restOfPath = '/' + pathParts.slice(1).join('/')
-    const origin = env.ORIGIN || 'http://localhost:5173'
-    const englishUrl = `${origin}${restOfPath}`
+    // Build the canonical English path
+    const rest = segments.slice(1)
+    const canonicalPath = '/' + rest.join('/')
 
-    try {
-      // Fetch the English version
-      const englishResponse = await fetch(englishUrl, {
-        headers: {
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        },
-      })
-
-      if (!englishResponse.ok) {
-        return new Response(
-          JSON.stringify({ error: 'Page not found', path: restOfPath }),
-          {
-            status: englishResponse.status,
-            headers: { 'Content-Type': 'application/json' },
-          }
-        )
-      }
-
-      const englishHtml = await englishResponse.text()
-      const contentHash = await hashContent(englishHtml)
-
-      // Check cache
-      const cacheKey = getCacheKey(restOfPath, lang, contentHash)
-      const cachedTranslation = await env.TRANSLATION_CACHE.match(cacheKey)
-
-      if (cachedTranslation) {
-        const translatedHtml = await cachedTranslation.text()
-        return new Response(translatedHtml, {
-          headers: {
-            'Content-Type': 'text/html; charset=utf-8',
-            'X-Translation-Cache': 'HIT',
-            'X-Translation-Language': lang,
-          },
-        })
-      }
-
-      // Extract content
-      const extracted = extractContent(englishHtml)
-      if (!extracted) {
-        // Fallback: return original English content
-        return new Response(englishHtml, {
-          headers: {
-            'Content-Type': 'text/html; charset=utf-8',
-            'X-Translation-Status': 'fallback',
-          },
-        })
-      }
-
-      // Translate
-      const langName = LANGUAGE_NAMES[lang] || lang
-      const translatedContent = await translateWithRiva(
-        extracted.content,
-        lang,
-        langName,
-        env
-      )
-
-      // Replace content in HTML
-      const translatedHtml = replaceContent(englishHtml, translatedContent)
-
-      // Cache the translation
-      const cacheResponse = new Response(translatedHtml, {
-        headers: {
-          'Content-Type': 'text/html; charset=utf-8',
-        },
-      })
-
-      await env.TRANSLATION_CACHE.put(cacheKey, cacheResponse, {
-        expirationTtl: parseInt(env.CACHE_TTL_SECONDS || '604800'), // 7 days default
-      })
-
-      return new Response(translatedHtml, {
-        headers: {
-          'Content-Type': 'text/html; charset=utf-8',
-          'X-Translation-Cache': 'MISS',
-          'X-Translation-Language': lang,
-        },
-      })
-    } catch (error) {
-      console.error('Translation error:', error)
-
-      // Fallback to English on error
-      try {
-        const fallbackResponse = await fetch(englishUrl)
-        if (fallbackResponse.ok) {
-          const fallbackHtml = await fallbackResponse.text()
-          return new Response(fallbackHtml, {
-            headers: {
-              'Content-Type': 'text/html; charset=utf-8',
-              'X-Translation-Status': 'error-fallback',
-            },
-          })
-        }
-      } catch (fallbackError) {
-        console.error('Fallback error:', fallbackError)
-      }
-
-      return new Response(
-        JSON.stringify({
-          error: 'Translation failed',
-          message: error instanceof Error ? error.message : 'Unknown error',
-        }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      )
-    }
+    return handleTranslation(request, env, canonicalPath, langConfig)
   },
 }
