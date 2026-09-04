@@ -1,0 +1,14 @@
+name = "vitepress-translation-worker"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Cache configuration
+[cache]
+binding = "TRANSLATION_CACHE"
+
+# Environment variables (non-secret)
+[vars]
+ORIGIN = "https://italiatroller.dpdns.org"
+MODEL = "riva-translate-4b-instruct-v2"
+CACHE_TTL_SECONDS = "604800" # 7 days

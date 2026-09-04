@@ -1,4 +1,37 @@
 /* --------------------------------------------------------------------------
+ * Noto Sans KR (Local)
+ * -------------------------------------------------------------------------- */
+
+@font-face {
+  font-family: 'Noto Sans KR';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/NotoSansKR-Regular.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Noto Sans KR';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/NotoSansKR-Medium.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Noto Sans KR';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/NotoSansKR-SemiBold.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Noto Sans KR';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/NotoSansKR-Bold.ttf') format('truetype');
+}
+
+/* --------------------------------------------------------------------------
  * Ayu Theme (Dark Mode Only)
  * -------------------------------------------------------------------------- */
 
@@ -15,6 +48,9 @@
 
   --vp-c-divider: #4f4b54;
   --vp-c-gutter: #38343f;
+
+  /* Fonts */
+  --vp-font-family-base: 'Noto Sans KR', 'Inter', ui-sans-serif, system-ui, sans-serif;
 
   /* Ayu blue */
   --vp-c-brand-1: #5ca9ff;
@@ -86,15 +122,6 @@
   --blog-card-bg: #0d0b12;
   --blog-card-hover: rgba(92, 169, 255, 0.12);
   --blog-post-bg: #06040a;
-
-  /* GTranslate */
-  --gt-bg: #0d0b12;
-  --gt-bg-selected: #5ca9ff;
-  --gt-text: #cfcfcf;
-  --gt-text-selected: #06040a;
-  --gt-border: #4f4b54;
-  --gt-hover-bg: rgba(92, 169, 255, 0.16);
-  --gt-hover-text: #7bc3ff;
 }
 
 /* --------------------------------------------------------------------------
@@ -215,147 +242,6 @@
 }
 
 /* --------------------------------------------------------------------------
- * GTranslate
- * -------------------------------------------------------------------------- */
-
-.gtranslate_wrapper {
-  position: fixed;
-  bottom: 1rem;
-  right: 1rem;
-  z-index: 1000;
-}
-
-div.skiptranslate,
-#google_translate_element2 {
-  display: none !important;
-}
-
-body {
-  top: 0 !important;
-}
-
-font font {
-  background-color: transparent !important;
-  box-shadow: none !important;
-  position: initial !important;
-}
-
-.gt_float_switcher {
-  font-family: var(--vp-font-family-base) !important;
-  font-size: 14px !important;
-  border-radius: 10px !important;
-  color: var(--gt-text) !important;
-  display: inline-block !important;
-  line-height: 20px !important;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18) !important;
-  background: var(--gt-bg) !important;
-  border: 1px solid var(--gt-border) !important;
-  overflow: visible !important;
-  transition: all 0.3s ease !important;
-}
-
-.gt_float_switcher img {
-  vertical-align: middle !important;
-  display: inline-block !important;
-  width: 28px !important;
-  height: 24px !important;
-  margin: 0 6px 0 0 !important;
-  border-radius: 3px !important;
-}
-
-.gt_float_switcher .gt-selected {
-  position: relative !important;
-  z-index: 888 !important;
-  background: var(--gt-bg-selected) !important;
-  cursor: pointer !important;
-  text-transform: uppercase !important;
-  overflow: hidden !important;
-  text-align: left !important;
-  border-radius: 10px !important;
-}
-
-.gt_float_switcher .gt-selected .gt-current-lang {
-  padding: 10px 15px !important;
-  color: var(--gt-text-selected) !important;
-  font-weight: 700 !important;
-  font-family: var(--vp-font-family-base) !important;
-}
-
-.gt_float_switcher .gt-selected .gt-current-lang span.gt-lang-code {
-  position: relative !important;
-  top: 2px !important;
-}
-
-.gt_float_switcher .gt-selected .gt-current-lang span.gt_float_switcher-arrow {
-  display: inline-block !important;
-  height: 24px !important;
-  width: 15px !important;
-  vertical-align: middle !important;
-  background-position: 50% !important;
-  background-size: 11px !important;
-  background-repeat: no-repeat !important;
-  transition: all 0.3s !important;
-  transform: rotate(-180deg) !important;
-}
-
-.gt_float_switcher .gt-selected .gt-current-lang
-span.gt_float_switcher-arrow.gt_arrow_rotate {
-  transform: rotate(0deg) !important;
-}
-
-.gt_float_switcher .gt_options {
-  position: relative !important;
-  z-index: 777 !important;
-  max-height: 250px !important;
-  overflow-y: auto !important;
-  transform: translateY(-30px) !important;
-  opacity: 0 !important;
-  cursor: pointer !important;
-  transition: all 0.4s cubic-bezier(0.3, 1.1, 0.4, 1.1) !important;
-  background: var(--gt-bg) !important;
-  border-radius: 0 0 10px 10px !important;
-}
-
-.gt_float_switcher .gt_options a {
-  display: block !important;
-  text-decoration: none !important;
-  padding: 10px 15px !important;
-  color: var(--gt-text) !important;
-  font-family: var(--vp-font-family-base) !important;
-  transition:
-    background-color 0.15s,
-    color 0.15s !important;
-  border-top: 1px solid var(--gt-border) !important;
-}
-
-.gt_float_switcher .gt_options a:hover {
-  background: var(--gt-hover-bg) !important;
-  color: var(--gt-hover-text) !important;
-}
-
-.gt_float_switcher .gt_options a.gt-current {
-  display: none !important;
-}
-
-.gt_float_switcher .gt_options.gt-open {
-  opacity: 1 !important;
-  transform: translateY(0) !important;
-}
-
-.gt_float_switcher .gt_options::-webkit-scrollbar-track {
-  background-color: var(--vp-c-bg-soft) !important;
-}
-
-.gt_float_switcher .gt_options::-webkit-scrollbar {
-  width: 5px !important;
-}
-
-.gt_float_switcher .gt_options::-webkit-scrollbar-thumb {
-  background-color: var(--vp-c-brand-1) !important;
-  border-radius: 3px !important;
-}
-
-/* --------------------------------------------------------------------------
  * Focus styles
  * -------------------------------------------------------------------------- */
 
@@ -382,23 +268,19 @@ span.gt_float_switcher-arrow.gt_arrow_rotate {
 }
 
 /* --------------------------------------------------------------------------
- * Mobile
+ * Language Selector
  * -------------------------------------------------------------------------- */
 
-@media (max-width: 640px) {
-  .gtranslate_wrapper {
-    bottom: 0.75rem;
-    right: 0.75rem;
-  }
-
-  .gt_float_switcher {
-    font-size: 13px !important;
-  }
-
-  .gt_float_switcher img {
-    width: 24px !important;
-  }
+.language-float-wrapper {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 1000;
 }
+
+/* --------------------------------------------------------------------------
+ * Mobile
+ * -------------------------------------------------------------------------- */
 
 @media (min-width: 960px) {
   :root {

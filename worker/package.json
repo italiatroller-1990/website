@@ -1,0 +1,14 @@
+{
+  "name": "vitepress-translation-worker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "cache:purge": "wrangler kv:key delete --binding TRANSLATION_CACHE --prefix translate:"
+  },
+  "devDependencies": {
+    "wrangler": "^3.80.0"
+  }
+}

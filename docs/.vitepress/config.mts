@@ -9,23 +9,7 @@ export default defineConfig({
   title: "Italia Troller's website",
   description: "My personal site for blogs and stuff!",
   lastUpdated: true,
-  head: [
-    ['script', {}, `
-      window.gtranslateSettings = {
-        default_language: "en",
-        native_language_names: true,
-        detect_browser_language: true,
-        wrapper_selector: ".gtranslate_wrapper",
-        color_scheme: "dark",
-        flag_style: "2d",
-        flag_size: 24,
-        position: "bottom-right",
-        float_open_direction: "up",
-        wrapper_class: "gtranslate-custom"
-      };
-    `],
-    ['script', { src: 'https://cdn.gtranslate.net/widgets/latest/float.js', defer: '' }],
-  ],
+  head: [],
   ignoreDeadLinks: [
     '/lifelog/old-blogs-ar/index',
     '/guides/how-to-buy-a-laptop-in-2026/index'
