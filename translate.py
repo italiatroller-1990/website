@@ -56,7 +56,7 @@ def ensure_requirements():
         import requests
     except ImportError:
         print("Installing requirements...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "requirements.txt"])
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "requests"])
         print()
 
 ensure_requirements()
@@ -324,9 +324,6 @@ def nim_translate(text: str, target_lang: str, api_key: str) -> str:
 # Regex patterns for protecting non-translatable regions.
 # Order matters: longer/more specific patterns first.
 
-# Regex patterns for protecting non-translatable regions.
-# Order matters: longer/more specific patterns first.
-
 # Phase 1: Block-level protections (entire regions)
 BLOCK_PATTERNS: List[Tuple[re.Pattern, str]] = [
     # Fenced code blocks
@@ -368,6 +365,8 @@ def extract_frontmatter_translatables(frontmatter: str) -> List[dict]:
 
     Translates string values (title, description, details, etc.)
     but preserves keys, dates, arrays of tags, and code expressions.
+
+    FIX: Improved YAML parsing to handle quoted strings with escapes better.
     """
     segments = []
     lines = frontmatter.split('\n')
@@ -378,36 +377,55 @@ def extract_frontmatter_translatables(frontmatter: str) -> List[dict]:
         #   title: "My Title"
         #   - title: "My Title"
         #   details: "Some description"
-        match = re.match(r'^(\s*-?\s*[a-zA-Z_-]+:\s+)(".*?"|\'.*?\'|[^\n]+)\s*$', line)
-        if match:
+        
+        # Try double-quoted strings first (handle escapes)
+        match = re.match(r'^(\s*-?\s*[a-zA-Z_-]+:\s+)"((?:\\.|[^"\\])*)"', line)
+        if not match:
+            # Try single-quoted strings
+            match = re.match(r"^(\s*-?\s*[a-zA-Z_-]+:\s+)'((?:\\'|[^'\\])*)'", line)
+            quote_char = "'"
+        else:
+            quote_char = '"'
+        
+        if not match:
+            # Try unquoted values (but be conservative - only alphanumeric + basic punctuation)
+            match = re.match(r'^(\s*-?\s*[a-zA-Z_-]+:\s+)([^\n#]+?)(?:\s*#.*)?$', line)
+            if match:
+                key_part = match.group(1)
+                value_part = match.group(2).strip()
+                quote_char = None
+            else:
+                # Couldn't parse this line - preserve it
+                segments.append({"text": line, "type": "frontmatter_line", "line_idx": i, "protected": True})
+                continue
+        else:
             key_part = match.group(1)
-            value_part = match.group(2).strip()
-            # Extract key name (strip leading "- " if present)
-            key_name = re.sub(r'^\s*-?\s*', '', key_part).strip().rstrip(':').lower()
-            translatable_keys = {
-                'title', 'description', 'details', 'name', 'tagline',
-                'label', 'text', 'placeholder', 'hero'
-            }
-            if key_name in translatable_keys:
-                # Extract the string content
-                if value_part and value_part[0] in ('"', "'"):
-                    quote_char = value_part[0]
-                    string_content = value_part[1:-1]
-                else:
-                    quote_char = '"'
-                    string_content = value_part
-                if len(string_content.strip()) >= MIN_TEXT_LENGTH:
-                    segments.append({
-                        "text": string_content,
-                        "type": "frontmatter_value",
-                        "line_idx": i,
-                        "key": key_name,
-                        "quote": quote_char,
-                        "full_key": key_part.rstrip() + " ",  # ensure space after colon
-                    })
-                    continue
-        # Protected line - preserve original text including any trailing newline
-        segments.append({"text": line, "type": "frontmatter_line", "line_idx": i, "protected": True})
+            value_part = match.group(2)
+            # Unescape the string if quoted
+            if quote_char == '"':
+                value_part = value_part.replace('\\"', '"')
+            elif quote_char == "'":
+                value_part = value_part.replace("\\'", "'")
+
+        # Extract key name (strip leading "- " if present)
+        key_name = re.sub(r'^\s*-?\s*', '', key_part).strip().rstrip(':').lower()
+        translatable_keys = {
+            'title', 'description', 'details', 'name', 'tagline',
+            'label', 'text', 'placeholder', 'hero'
+        }
+        
+        if key_name in translatable_keys and len(value_part.strip()) >= MIN_TEXT_LENGTH:
+            segments.append({
+                "text": value_part,
+                "type": "frontmatter_value",
+                "line_idx": i,
+                "key": key_name,
+                "quote": quote_char or '"',
+                "full_key": key_part.rstrip() + " ",  # ensure space after colon
+            })
+        else:
+            # Protected line - preserve original text
+            segments.append({"text": line, "type": "frontmatter_line", "line_idx": i, "protected": True})
 
     return segments
 
@@ -423,7 +441,7 @@ def extract_translatables(md: str) -> List[dict]:
     4. Handle links specially: protect URL but leave text translatable
     5. Extract remaining prose segments
 
-    Returns list of {"text": str, "type": str, "protected": bool}.
+    FIX: Links are now properly added to protected list and handled in reassembly.
     """
     segments = []
 
@@ -475,8 +493,9 @@ def extract_translatables(md: str) -> List[dict]:
     protected.sort(key=lambda x: x[0])
 
     # Phase 3: Handle links — extract text for translation, protect URL
-    # Find all links in unprotected regions
-    link_protected = []
+    # Find all links in unprotected regions and add to protected list
+    link_data = {}  # Map (start, end) -> (link_text, link_url)
+    
     for region_start, region_end in unprotected_regions:
         region_text = working[region_start:region_end]
         for match in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)", region_text):
@@ -487,47 +506,43 @@ def extract_translatables(md: str) -> List[dict]:
             if not overlaps:
                 link_text = match.group(1)
                 link_url = match.group(2)
-                # Protect the entire link but mark it as translatable link
-                link_protected.append((full_start, full_end, match.group(0), "link", link_text, link_url))
+                # Store link data and mark as protected
+                link_data[(full_start, full_end)] = (link_text, link_url)
+                protected.append((full_start, full_end, match.group(0), "link"))
 
     protected.sort(key=lambda x: x[0])
 
-    # Phase 4: Build segments from unprotected regions
+    # Phase 4: Build segments from protected and unprotected regions
     pos = 0
     for start, end, content, kind in protected:
         if start > pos:
             text = working[pos:start]
             segments.append({"text": text, "type": "prose"})
-        segments.append({"text": content, "type": f"protected:{kind}", "protected": True})
+        
+        # Special handling for links: split into components
+        if kind == "link" and (start, end) in link_data:
+            link_text, link_url = link_data[(start, end)]
+            if len(link_text.strip()) >= MIN_TEXT_LENGTH:
+                # Link text is long enough to translate - split into parts
+                segments.append({"text": "[", "type": "protected:link_bracket", "protected": True})
+                segments.append({"text": link_text, "type": "link_text"})
+                segments.append({"text": "](", "type": "protected:link_bracket", "protected": True})
+                segments.append({"text": link_url, "type": "protected:link_url", "protected": True})
+                segments.append({"text": ")", "type": "protected:link_bracket", "protected": True})
+            else:
+                # Short link text - protect entire thing
+                segments.append({"text": content, "type": f"protected:{kind}", "protected": True})
+        else:
+            # Regular protected content
+            segments.append({"text": content, "type": f"protected:{kind}", "protected": True})
+        
         pos = end
 
     if pos < len(working):
         text = working[pos:]
         segments.append({"text": text, "type": "prose"})
 
-    # Now handle links: replace protected link segments with translatable link segments
-    final_segments = []
-    link_idx = 0
-    for seg in segments:
-        if seg.get("type") == "protected:link" and link_idx < len(link_protected):
-            _, _, original, _, link_text, link_url = link_protected[link_idx]
-            link_idx += 1
-            # Check if link text is long enough to translate
-            if len(link_text.strip()) >= MIN_TEXT_LENGTH:
-                # Split into: prefix [text] (url)
-                # The link text might contain markdown like **bold**
-                final_segments.append({"text": "[", "type": "protected:link_bracket", "protected": True})
-                final_segments.append({"text": link_text, "type": "link_text"})
-                final_segments.append({"text": "](", "type": "protected:link_bracket", "protected": True})
-                final_segments.append({"text": link_url, "type": "protected:link_url", "protected": True})
-                final_segments.append({"text": ")", "type": "protected:link_bracket", "protected": True})
-            else:
-                # Short link text, protect entire thing
-                final_segments.append({"text": original, "type": "protected:link", "protected": True})
-        else:
-            final_segments.append(seg)
-
-    return final_segments
+    return segments
 
 
 def translate_markdown(
@@ -545,6 +560,8 @@ def translate_markdown(
     2. Deduplicate globally
     3. Look up cache, send misses to NVIDIA
     4. Reassemble document
+
+    FIX: Improved frontmatter newline handling - preserves original line structure.
     """
     segments = extract_translatables(md)
 
@@ -592,12 +609,18 @@ def translate_markdown(
         text = seg["text"]
         seg_type = seg.get("type", "")
 
-        # Handle frontmatter lines (protected) - add newline
+        # Handle frontmatter lines (protected) - preserve original line structure
         if seg_type == "frontmatter_line":
-            result.append(text + "\n")
+            # Check if line already ends with newline in source
+            if text.endswith('\n'):
+                result.append(text)
+            else:
+                # Only add newline if not already present
+                # (Original frontmatter lines in split('\n') won't have trailing \n except the last)
+                result.append(text + "\n")
             continue
 
-        # Handle frontmatter value segments - add newline
+        # Handle frontmatter value segments
         if seg_type == "frontmatter_value":
             norm = re.sub(r"\s+", " ", text.strip())
             if norm in translations:
@@ -607,7 +630,14 @@ def translate_markdown(
             # Rebuild the YAML line using full_key prefix
             full_key = seg.get("full_key", f'{seg.get("key", "title")}: ')
             quote = seg.get("quote", '"')
-            result.append(f'{full_key}{quote}{translated}{quote}\n')
+            # Escape quotes in translated text if needed
+            if quote == '"':
+                translated_escaped = translated.replace('"', '\\"')
+            elif quote == "'":
+                translated_escaped = translated.replace("'", "\\'")
+            else:
+                translated_escaped = translated
+            result.append(f'{full_key}{quote}{translated_escaped}{quote}\n')
             continue
 
         # Handle link text segments (translatable)
@@ -648,15 +678,34 @@ def fix_relative_paths(md: str, source_rel: Path, target_lang: str) -> str:
     When translating docs/tags/index.md → docs/vi/tags/index.md,
     paths like ../.vitepress need to become ../../.vitepress.
     """
-    def fix_path(match):
+    depth = len(source_rel.parts) - 1  # -1 for the filename itself
+    
+    # Build prefix for relative path adjustment
+    # If we're at docs/vi/tags/index.md and reference ../.. we need to add one more ../
+    if depth > 0:
+        extra_prefix = "../"
+    else:
+        extra_prefix = ""
+
+    def fix_relative_path(match):
+        full_text = match.group(0)
         path = match.group(1)
+        
         # Only fix relative paths that start with ../
         if path.startswith("../"):
-            return match.group(0).replace(path, "../" + path)
-        return match.group(0)
+            # Insert extra prefix
+            fixed_path = extra_prefix + path
+            return full_text.replace(path, fixed_path)
+        return full_text
 
-    # Fix relative paths in imports: from '../...'
-    md = re.sub(r"""from\s+['"](\.\.[^'"]+)['"]""", fix_path, md)
+    # Fix relative paths in various contexts
+    # from imports
+    md = re.sub(r"""from\s+['"](\.\.[^'"]+)['"]""", fix_relative_path, md)
+    # import statements
+    md = re.sub(r"""import\s+[^;]+from\s+['"](\.\.[^'"]+)['"]""", fix_relative_path, md)
+    # Image and link paths should already be protected, but try anyway
+    # md = re.sub(r"""!\[[^\]]*\]\((\.\.[^)]+)\)""", fix_relative_path, md)
+    # md = re.sub(r"""\[[^\]]+\]\((\.\.[^)]+)\)""", fix_relative_path, md)
 
     return md
 
