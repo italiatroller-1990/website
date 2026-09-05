@@ -69,6 +69,18 @@ function handleClickOutside(e: MouseEvent): void {
 onMounted(() => {
   document.addEventListener('keydown', handleKeydown)
   document.addEventListener('click', handleClickOutside)
+
+  // Auto-redirect to saved language if on English page
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved && saved !== 'en' && currentLang.value === 'en') {
+      const path = getLocalizedPath(saved)
+      if (path !== route.path) {
+        window.location.href = path
+        return
+      }
+    }
+  } catch {}
 })
 
 onUnmounted(() => {
