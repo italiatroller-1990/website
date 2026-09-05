@@ -641,6 +641,26 @@ def translate_markdown(
 # FILE DISCOVERY
 # ============================================================
 
+def fix_relative_paths(md: str, source_rel: Path, target_lang: str) -> str:
+    """
+    Fix relative paths in translated markdown.
+
+    When translating docs/tags/index.md → docs/vi/tags/index.md,
+    paths like ../.vitepress need to become ../../.vitepress.
+    """
+    def fix_path(match):
+        path = match.group(1)
+        # Only fix relative paths that start with ../
+        if path.startswith("../"):
+            return match.group(0).replace(path, "../" + path)
+        return match.group(0)
+
+    # Fix relative paths in imports: from '../...'
+    md = re.sub(r"""from\s+['"](\.\.[^'"]+)['"]""", fix_path, md)
+
+    return md
+
+
 def find_source_pages(docs: Path, lang_dirs: set) -> List[Path]:
     """Find all .md files under docs/, excluding language directories."""
     pages = []
@@ -679,6 +699,9 @@ class TranslationWorker:
         translated = translate_markdown(
             md, target_lang, self.api_key, self.cache, self.stats, self.lock
         )
+
+        # Fix relative paths for language subdirectory
+        translated = fix_relative_paths(translated, rel, target_lang)
 
         # Write translated file
         out_dir = docs / target_lang / rel.parent
@@ -743,7 +766,42 @@ def main():
         print("ERROR: NVIDIA_API_KEY is not set.")
         print()
         print('Run: export NVIDIA_API_KEY="nvapi-..."')
+        print()
+        print("For Cloudflare Pages:")
+        print("  1. Go to Pages → your project → Settings → Build")
+        print("  2. Add build variable: NVIDIA_API_KEY = nvapi-...")
+        print("  3. Branch: All (not a specific branch)")
         sys.exit(1)
+
+    # Validate API key with a test request
+    if not args.dry_run and API_KEY:
+        print("Validating NVIDIA API key...")
+        try:
+            test_resp = requests.post(
+                NIM_ENDPOINT,
+                headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
+                json={
+                    "model": NIM_MODEL,
+                    "messages": [{"role": "system", "content": "en-vi"}, {"role": "user", "content": "Hello"}],
+                    "temperature": 0,
+                    "max_tokens": 100,
+                },
+                timeout=30,
+            )
+            if test_resp.status_code == 403:
+                print(f"ERROR: NVIDIA API key is invalid or expired.")
+                print(f"Response: {test_resp.text[:300]}")
+                print()
+                print("Please check your NVIDIA_API_KEY in Cloudflare Pages build variables.")
+                sys.exit(1)
+            elif not test_resp.ok:
+                print(f"WARNING: NVIDIA API returned HTTP {test_resp.status_code}")
+                print(f"Response: {test_resp.text[:300]}")
+            else:
+                print("API key validated successfully.")
+        except Exception as e:
+            print(f"WARNING: Could not validate API key: {e}")
+            print("Continuing anyway...")
 
     # Clear cache
     if args.clear_cache:
