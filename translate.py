@@ -41,6 +41,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import threading
@@ -48,6 +49,17 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+def ensure_requirements():
+    """Install requirements.txt if requests is missing."""
+    try:
+        import requests
+    except ImportError:
+        print("Installing requirements...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "requirements.txt"])
+        print()
+
+ensure_requirements()
 
 import requests
 
