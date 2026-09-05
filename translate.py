@@ -153,7 +153,7 @@ def save_json(path: Path, data: dict) -> None:
 # ============================================================
 
 def cache_key(text: str, target_lang: str) -> str:
-    """SHA-256 key from version + model + source + target + normalized text."""
+    """SHA-256 key from version + model + source + target + normalized text + length."""
     norm = re.sub(r"\s+", " ", text.strip())
     raw = json.dumps({
         "v": CACHE_VERSION,
@@ -161,6 +161,7 @@ def cache_key(text: str, target_lang: str) -> str:
         "s": "en",
         "t": target_lang,
         "text": norm,
+        "len": len(text),
     }, ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -552,7 +553,7 @@ def translate_markdown(
     cache: dict,
     stats: dict,
     lock: threading.Lock,
-) -> str:
+) -> Tuple[str, List[str]]:
     """
     Translate a Markdown document.
 
@@ -561,7 +562,7 @@ def translate_markdown(
     3. Look up cache, send misses to NVIDIA
     4. Reassemble document
 
-    FIX: Improved frontmatter newline handling - preserves original line structure.
+    Returns (translated_markdown, list_of_failed_strings).
     """
     segments = extract_translatables(md)
 
@@ -591,6 +592,7 @@ def translate_markdown(
 
     # Translate missing texts (one NVIDIA request per unique string)
     translations = {}
+    failed = []
     for norm, original in to_translate.items():
         try:
             translated = nim_translate(original, target_lang, api_key)
@@ -602,6 +604,7 @@ def translate_markdown(
         except Exception as e:
             print(f"      ERROR translating {norm[:60]!r}: {e}")
             translations[norm] = original  # fallback to English
+            failed.append(norm)
 
     # Reassemble: replace translatable segments with translations
     result = []
@@ -664,7 +667,7 @@ def translate_markdown(
         else:
             result.append(text)
 
-    return "".join(result)
+    return "".join(result), failed
 
 
 # ============================================================
@@ -698,8 +701,9 @@ def fix_relative_paths(md: str, source_rel: Path, target_lang: str) -> str:
             return full_text.replace(path, fixed_path)
         return full_text
 
-    # Fix relative paths in imports: from '../...'
-    md = re.sub(r"""from\s+['"](\.\.[^'"]+)['"]""", fix_relative_path, md)
+    # Fix relative paths in ES6 imports and CommonJS requires
+    md = re.sub(r"""(?:from|require)\s*\(\s*['"](\.\.[^'"]+)['"]""", fix_relative_path, md)
+    md = re.sub(r"""import\s+[^'"]*from\s+['"](\.\.[^'"]+)['"]""", fix_relative_path, md)
 
     return md
 
@@ -736,13 +740,13 @@ class TranslationWorker:
         self.lock = lock
 
     def translate_file(self, md_path: Path, docs: Path, target_lang: str) -> dict:
-        """Translate one file for one language. Returns metadata."""
+        """Translate one file for one language. Returns metadata including failures."""
         rel = md_path.relative_to(docs)
         source_hash = file_hash(md_path)
 
         md = md_path.read_text(encoding="utf-8")
 
-        translated = translate_markdown(
+        translated, failed = translate_markdown(
             md, target_lang, self.api_key, self.cache, self.stats, self.lock
         )
 
@@ -754,7 +758,7 @@ class TranslationWorker:
         out_path = out_dir / md_path.name
         atomic_write(out_path, translated)
 
-        return {"rel": str(rel), "hash": source_hash}
+        return {"rel": str(rel), "hash": source_hash, "failed": failed}
 
 
 # ============================================================
@@ -796,6 +800,11 @@ def parse_args():
         "--force",
         action="store_true",
         help="Force retranslation (still uses string cache)",
+    )
+    p.add_argument(
+        "--strict",
+        action="store_true",
+        help="Fail on any translation error instead of falling back to English",
     )
     return p.parse_args()
 
@@ -937,6 +946,7 @@ def main():
 
         if not args.dry_run and tasks:
             worker = TranslationWorker(API_KEY, cache, stats, lock)
+            lang_failures = []
 
             def do_task(task):
                 md_path, h = task
@@ -950,19 +960,28 @@ def main():
             if args.workers <= 1:
                 for task in tasks:
                     try:
-                        do_task(task)
+                        r = do_task(task)
+                        if r["failed"]:
+                            lang_failures.extend(r["failed"])
                     except Exception as e:
                         print(f"  ERROR: {e}")
-                        sys.exit(1)
+                        if args.strict:
+                            sys.exit(1)
             else:
                 with ThreadPoolExecutor(max_workers=args.workers) as pool:
                     futures = {pool.submit(do_task, t): t for t in tasks}
                     for future in as_completed(futures):
                         try:
-                            future.result()
+                            r = future.result()
+                            if r["failed"]:
+                                lang_failures.extend(r["failed"])
                         except Exception as e:
                             print(f"  ERROR: {e}")
-                            sys.exit(1)
+                            if args.strict:
+                                sys.exit(1)
+
+            if lang_failures:
+                print(f"\n  WARNING: {len(lang_failures)} string(s) fell back to English")
 
             # Save cache and state after each language
             save_cache(cache)
@@ -982,6 +1001,8 @@ def main():
     print(f"Cache:  {CACHE_FILE}")
     print(f"State:  {STATE_FILE}")
     print(f"Output: {docs}/{{lang}}/")
+    if args.strict:
+        print(f"Mode:   STRICT (errors cause exit)")
     print()
 
 
