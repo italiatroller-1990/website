@@ -698,14 +698,8 @@ def fix_relative_paths(md: str, source_rel: Path, target_lang: str) -> str:
             return full_text.replace(path, fixed_path)
         return full_text
 
-    # Fix relative paths in various contexts
-    # from imports
+    # Fix relative paths in imports: from '../...'
     md = re.sub(r"""from\s+['"](\.\.[^'"]+)['"]""", fix_relative_path, md)
-    # import statements
-    md = re.sub(r"""import\s+[^;]+from\s+['"](\.\.[^'"]+)['"]""", fix_relative_path, md)
-    # Image and link paths should already be protected, but try anyway
-    # md = re.sub(r"""!\[[^\]]*\]\((\.\.[^)]+)\)""", fix_relative_path, md)
-    # md = re.sub(r"""\[[^\]]+\]\((\.\.[^)]+)\)""", fix_relative_path, md)
 
     return md
 
