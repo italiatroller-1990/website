@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vitepress'
 import { languages } from '../languages'
 
+const STORAGE_KEY = 'preferred-language'
 const route = useRoute()
 const isOpen = ref(false)
 
@@ -33,6 +34,11 @@ function getLocalizedPath(langCode: string): string {
 }
 
 function navigateTo(langCode: string): void {
+  // Save preference
+  try {
+    localStorage.setItem(STORAGE_KEY, langCode)
+  } catch {}
+  
   const path = getLocalizedPath(langCode)
   if (path !== route.path) {
     window.location.href = path
@@ -53,12 +59,21 @@ function handleKeydown(e: KeyboardEvent): void {
   }
 }
 
+function handleClickOutside(e: MouseEvent): void {
+  const target = e.target as HTMLElement
+  if (!target.closest('.language-float')) {
+    closeDropdown()
+  }
+}
+
 onMounted(() => {
   document.addEventListener('keydown', handleKeydown)
+  document.addEventListener('click', handleClickOutside)
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 

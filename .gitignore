@@ -3,3 +3,6 @@ dist/
 .DS_Store
 .vitepress/.temp/
 .vitepress/.cache/
+__pycache__/
+translation-cache.json
+.env

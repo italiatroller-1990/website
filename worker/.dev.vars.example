@@ -1,4 +1,0 @@
-# Cloudflare Workers secrets (loaded by wrangler in local dev)
-# Copy this file to .dev.vars and fill in your values.
-
-NVIDIA_API_KEY=your_nvidia_api_key_here

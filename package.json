@@ -3,6 +3,8 @@
   "scripts": {
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
+    "docs:translate": "python3 translate.py",
+    "docs:build:all": "npm run docs:translate && npm run docs:build",
     "docs:preview": "vitepress preview docs"
   },
   "devDependencies": {

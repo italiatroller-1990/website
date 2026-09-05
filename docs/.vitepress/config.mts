@@ -43,7 +43,7 @@ export default defineConfig({
   markdown: {
     theme: 'github-dark',
     image: {
-      lazyLoading: true
+      lazyLoad: true
     }
   }
 })
