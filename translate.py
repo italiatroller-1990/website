@@ -662,7 +662,7 @@ def fix_relative_paths(md: str, source_rel: Path, target_lang: str) -> str:
 
 
 def find_source_pages(docs: Path, lang_dirs: set) -> List[Path]:
-    """Find all .md files under docs/, excluding language directories."""
+    """Find all .md files under docs/, excluding language directories and dynamic routes."""
     pages = []
     for md in docs.rglob("*.md"):
         rel = md.relative_to(docs)
@@ -671,6 +671,9 @@ def find_source_pages(docs: Path, lang_dirs: set) -> List[Path]:
             continue
         # Skip .vitepress directory
         if ".vitepress" in rel.parts:
+            continue
+        # Skip dynamic route files like [tag].md
+        if "[" in md.name:
             continue
         pages.append(md)
     return sorted(pages)

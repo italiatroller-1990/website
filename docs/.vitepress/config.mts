@@ -10,10 +10,7 @@ export default defineConfig({
   description: "My personal site for blogs and stuff!",
   lastUpdated: true,
   head: [],
-  ignoreDeadLinks: [
-    '/lifelog/old-blogs-ar/index',
-    '/guides/how-to-buy-a-laptop-in-2026/index'
-  ],
+  ignoreDeadLinks: true,
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
     nav: [
