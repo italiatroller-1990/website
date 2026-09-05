@@ -78,7 +78,7 @@ NIM_MODEL = "nvidia/riva-translate-4b-instruct-v2"
 
 API_KEY = os.environ.get("NVIDIA_API_KEY", "").strip()
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2  # Bump when improving translation prompts
 
 # Languages
 LANGUAGES = {
@@ -240,13 +240,31 @@ def page_mark_done(state: dict, rel_path: str, source_hash: str, lang: str) -> N
 # ============================================================
 
 def nim_translate(text: str, target_lang: str, api_key: str) -> str:
-    """Translate one text unit via NVIDIA NIM chat completions."""
+    """Translate one text unit via NVIDIA NIM chat completions with improved prompting."""
     prompt_code = LANG_PROMPT.get(target_lang, target_lang.lower())
+    lang_full = LANGUAGES.get(target_lang, target_lang)
+
+    # Domain-aware system prompt for better quality
+    system_prompt = (
+        f"You are translating technical blog content about Linux, self-hosting, "
+        f"gaming, and software development.\n"
+        f"Target language: {lang_full}\n\n"
+        f"Requirements:\n"
+        f"1. Preserve ALL markdown syntax exactly (links, code blocks, emphasis, etc.)\n"
+        f"2. Keep technical terms consistent with {lang_full} conventions\n"
+        f"3. Maintain the casual, friendly tone of the original\n"
+        f"4. Expand contractions naturally in the target language\n"
+        f"5. Fix spacing around punctuation per {lang_full} style\n"
+        f"6. Keep sentences flowing naturally\n"
+        f"7. Do NOT add explanations or commentary\n"
+        f"8. Do NOT alter any URLs, code, or HTML tags\n"
+        f"9. Do NOT translate proper nouns, brand names, or code identifiers"
+    )
 
     payload = {
         "model": NIM_MODEL,
         "messages": [
-            {"role": "system", "content": f"en-{prompt_code}"},
+            {"role": "system", "content": f"{system_prompt}\n\nTranslate to {lang_full}:"},
             {"role": "user", "content": text},
         ],
         "temperature": 0,
@@ -316,6 +334,32 @@ def nim_translate(text: str, target_lang: str, api_key: str) -> str:
             break
 
     raise RuntimeError(f"NVIDIA failed after retries: {last_error}")
+
+
+# ============================================================
+# POST-PROCESSING
+# ============================================================
+
+def post_process_translation(text: str, target_lang: str) -> str:
+    """Clean up common translation artifacts per language."""
+
+    # Language-specific fixes
+    if target_lang == "vi":
+        # Fix spacing before punctuation (Vietnamese style: no space before !?.,;:)
+        text = re.sub(r'\s+([!?.,;:])', r'\1', text)
+        # Fix double spaces
+        text = re.sub(r'  +', ' ', text)
+        # Fix spacing around brackets/parens
+        text = re.sub(r'\[\s+', '[', text)
+        text = re.sub(r'\s+\]', ']', text)
+        text = re.sub(r'\(\s+', '(', text)
+        text = re.sub(r'\s+\)', ')', text)
+
+    # Language-agnostic fixes
+    # Fix spacing around links: ] ( → ](
+    text = re.sub(r'\]\s*\(', '](', text)
+
+    return text
 
 
 # ============================================================
@@ -596,6 +640,7 @@ def translate_markdown(
     for norm, original in to_translate.items():
         try:
             translated = nim_translate(original, target_lang, api_key)
+            translated = post_process_translation(translated, target_lang)
             with lock:
                 cache_put(cache, original, target_lang, translated)
                 stats["nvidia_requests"] += 1
@@ -837,7 +882,10 @@ def main():
                 headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
                 json={
                     "model": NIM_MODEL,
-                    "messages": [{"role": "system", "content": "en-vi"}, {"role": "user", "content": "Hello"}],
+                    "messages": [
+                        {"role": "system", "content": "You are translating technical blog content about Linux, self-hosting, gaming, and software development.\nTarget language: Vietnamese\n\nRequirements:\n1. Preserve ALL markdown syntax exactly\n2. Keep technical terms consistent with Vietnamese conventions\n3. Maintain the casual, friendly tone of the original\n4. Do NOT add explanations or commentary\n5. Do NOT alter any URLs, code, or HTML tags\n6. Do NOT translate proper nouns, brand names, or code identifiers\n\nTranslate to Vietnamese:"},
+                        {"role": "user", "content": "Hello world"},
+                    ],
                     "temperature": 0,
                     "max_tokens": 100,
                 },
