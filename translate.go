@@ -23,6 +23,7 @@ const (
 	cacheVersion          = 8
 	minTextLength         = 2
 	defaultTimeoutSeconds = 120
+	defaultMaxRetries     = 2
 	defaultModel          = "poolside/laguna-xs-2.1"
 	defaultBaseURL        = "https://integrate.api.nvidia.com/v1"
 )
@@ -740,6 +741,15 @@ func timeoutSeconds() int {
 	return defaultTimeoutSeconds
 }
 
+func maxRetries() int {
+	if v := strings.TrimSpace(os.Getenv("TRANSLATION_MAX_RETRIES")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			return n
+		}
+	}
+	return defaultMaxRetries
+}
+
 func callAPI(text, targetLang string) (string, error) {
 	apiKey := strings.TrimSpace(os.Getenv("TRANSLATION_API_KEY"))
 	if apiKey == "" {
@@ -765,36 +775,66 @@ func callAPI(text, targetLang string) (string, error) {
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", strings.TrimSuffix(baseURL(), "/")+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("Content-Type", "application/json")
 	client := &http.Client{Timeout: time.Duration(timeoutSeconds()) * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
+	retries := maxRetries()
+	var lastErr error
+	for attempt := 0; attempt <= retries; attempt++ {
+		req, err := http.NewRequest("POST", strings.TrimSuffix(baseURL(), "/")+"/chat/completions", bytes.NewReader(body))
+		if err != nil {
+			return "", err
+		}
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := client.Do(req)
+		if err == nil {
+			if resp.StatusCode < 400 {
+				var result struct {
+					Choices []struct {
+						Message struct {
+							Content string `json:"content"`
+						} `json:"message"`
+					} `json:"choices"`
+				}
+				decodeErr := json.NewDecoder(resp.Body).Decode(&result)
+				resp.Body.Close()
+				if decodeErr != nil {
+					return "", decodeErr
+				}
+				if len(result.Choices) == 0 || strings.TrimSpace(result.Choices[0].Message.Content) == "" {
+					return "", errors.New("empty translation")
+				}
+				return strings.TrimSpace(result.Choices[0].Message.Content), nil
+			}
+			status := resp.StatusCode
+			b, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+			resp.Body.Close()
+			lastErr = fmt.Errorf("API error %s: %s", resp.Status, strings.TrimSpace(string(b)))
+			if status >= 400 && status < 500 && status != http.StatusRequestTimeout && status != http.StatusTooManyRequests {
+				return "", lastErr
+			}
+		} else {
+			lastErr = err
+		}
+
+		if attempt < retries {
+			delay := time.Duration(2<<attempt) * time.Second
+			fmt.Printf("      Retry %d/%d after %s (%s)\n", attempt+1, retries, delay, truncateError(lastErr))
+			time.Sleep(delay)
+		}
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return "", fmt.Errorf("API error %s: %s", resp.Status, strings.TrimSpace(string(b)))
+	return "", fmt.Errorf("API failed after %d retries: %w", retries, lastErr)
+}
+
+func truncateError(err error) string {
+	if err == nil {
+		return "unknown error"
 	}
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
+	message := err.Error()
+	if len(message) > 80 {
+		return message[:80]
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
-	}
-	if len(result.Choices) == 0 || strings.TrimSpace(result.Choices[0].Message.Content) == "" {
-		return "", errors.New("empty translation")
-	}
-	return strings.TrimSpace(result.Choices[0].Message.Content), nil
+	return message
 }
 
 const MAX_TOKENS = 8192
