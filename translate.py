@@ -79,11 +79,12 @@ TIMEOUT = int(os.environ.get("TRANSLATION_TIMEOUT", "120"))
 MAX_RETRIES = int(os.environ.get("TRANSLATION_MAX_RETRIES", "5"))
 RETRY_DELAYS = [2, 4, 8, 16, 32]
 
-CACHE_VERSION = 4
+CACHE_VERSION = 5
 REQUEST_DELAY = 0.15
 MAX_TOKENS = 4096
 MIN_TEXT_LENGTH = 2
 MAX_TEXT_LENGTH = 8000
+MIN_CHUNK_PROSE = 50  # minimum prose chars to send an API call
 
 LANGUAGES = {
     "vi": "Vietnamese",
@@ -224,11 +225,14 @@ def page_mark_done(state: dict, rel: str, h: str, lang: str) -> None:
 # ============================================================
 
 class Protector:
-    """Replaces non-translatable content with stable placeholders."""
+    """Replaces non-translatable content with stable placeholders.
+
+    The placeholder format __PH_N__ is chosen to be extremely unlikely
+    to appear in natural text or be modified by the translation model.
+    """
 
     def __init__(self):
         self._items: list[str] = []
-        self._map: dict[str, str] = {}
 
     def _placeholder(self, idx: int) -> str:
         return f"__PH_{idx}__"
@@ -237,58 +241,42 @@ class Protector:
         """Find and replace all non-translatable regions with placeholders."""
         regions: list[tuple[int, int, str]] = []
 
-        # Block-level: code fences (longest first)
-        for m in re.finditer(r"````[\s\S]*?````", text):
-            regions.append((m.start(), m.end(), m.group()))
-        for m in re.finditer(r"```[\s\S]*?```", text):
-            regions.append((m.start(), m.end(), m.group()))
-        for m in re.finditer(r"~~~~[\s\S]*?~~~~", text):
-            regions.append((m.start(), m.end(), m.group()))
-        for m in re.finditer(r"~~~[\s\S]*?~~~", text):
-            regions.append((m.start(), m.end(), m.group()))
-
-        # VitePress containers
-        for m in re.finditer(r"^:::\s*(?:tip|info|warning|danger|details)\b.*?^:::", text, re.DOTALL | re.MULTILINE):
-            regions.append((m.start(), m.end(), m.group()))
-
-        # HTML blocks
-        for pattern in [r"<script[\s\S]*?</script>", r"<style[\s\S]*?</style>", r"<!--[\s\S]*?-->"]:
-            for m in re.finditer(pattern, text, re.I):
+        def add(pattern: str, flags: int = 0) -> None:
+            for m in re.finditer(pattern, text, flags):
                 regions.append((m.start(), m.end(), m.group()))
 
-        # Vue/VitePress components
-        for m in re.finditer(r"<[A-Z][a-zA-Z0-9]*(?:\s[^>]*)?\s*/>", text):
-            regions.append((m.start(), m.end(), m.group()))
-        for m in re.finditer(r"<[A-Z][a-zA-Z0-9]*(?:\s[^>]*)?>[\s\S]*?</[A-Z][a-zA-Z0-9]*>", text):
-            regions.append((m.start(), m.end(), m.group()))
+        # --- Block-level protections (longest patterns first) ---
 
-        # Inline code
-        for m in re.finditer(r"`[^`\n]+`", text):
-            regions.append((m.start(), m.end(), m.group()))
+        # Fenced code blocks (4-backtick, 3-backtick, 4-tilde, 3-tilde)
+        add(r"````[\s\S]*?````")
+        add(r"```[\s\S]*?```")
+        add(r"~~~~[\s\S]*?~~~~")
+        add(r"~~~[\s\S]*?~~~")
 
-        # Images
-        for m in re.finditer(r"!\[[^\]]*\]\([^)]+\)", text):
-            regions.append((m.start(), m.end(), m.group()))
+        # VitePress containers: ::: tip ... :::
+        add(r"^:::\s*(?:tip|info|warning|danger|details)\b.*?^:::", re.DOTALL | re.MULTILINE)
 
-        # Autolinks
-        for m in re.finditer(r"<(https?://[^>]+)>", text):
-            regions.append((m.start(), m.end(), m.group()))
+        # HTML blocks: script, style, comments
+        add(r"<script[\s\S]*?</script>", re.I)
+        add(r"<style[\s\S]*?</style>", re.I)
+        add(r"<!--[\s\S]*?-->", re.I)
 
-        # Reference links [text][ref]
-        for m in re.finditer(r"\[[^\]]+\]\[[^\]]*\]", text):
-            regions.append((m.start(), m.end(), m.group()))
+        # Vue/VitePress components: <ComponentName ... /> or <ComponentName>...</ComponentName>
+        add(r"<[A-Z][a-zA-Z0-9]*(?:\s[^>]*)?\s*/>")
+        add(r"<[A-Z][a-zA-Z0-9]*(?:\s[^>]*)?>[\s\S]*?</[A-Z][a-zA-Z0-9]*>")
 
-        # Links: protect URL part but keep text translatable
-        for m in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)", text):
-            full_start, full_end = m.start(), m.end()
-            # Check if already covered by a block protection
-            already = any(full_start < e and full_end > s for s, e, _ in regions)
-            if not already:
-                # Protect the URL portion: ](url)
-                url_start = m.start(2) - 1  # position of '('
-                regions.append((url_start, full_end, m.group()[url_start - full_start:]))
+        # HTML tags with content (block-level)
+        for tag in ["div", "p", "span", "section", "article", "header", "footer",
+                     "nav", "main", "aside", "figure", "figcaption", "blockquote",
+                     "li", "td", "th", "h[1-6]", "iframe", "table", "thead", "tbody"]:
+            add(rf"<{tag}\b[^>]*>[\s\S]*?</{tag}>", re.I)
 
-        # Sort by start, remove overlaps (longest wins)
+        # Self-closing HTML tags
+        add(r"<(?:img|br|hr|input|source|link|meta)\b[^>]*/?>", re.I)
+
+        # --- Inline protections (within remaining unprotected regions) ---
+
+        # Collect unprotected regions
         regions.sort(key=lambda r: (r[0], -(r[1] - r[0])))
         merged: list[tuple[int, int, str]] = []
         for s, e, content in regions:
@@ -296,17 +284,69 @@ class Protector:
                 continue
             merged.append((s, e, content))
 
-        # Build placeholder map and replace
+        unprotected: list[tuple[int, int]] = []
+        pos = 0
+        for s, e, _ in merged:
+            if s > pos:
+                unprotected.append((pos, s))
+            pos = e
+        if pos < len(text):
+            unprotected.append((pos, len(text)))
+
+        inline: list[tuple[int, int, str]] = []
+        for ur_s, ur_e in unprotected:
+            region = text[ur_s:ur_e]
+
+            # Inline code
+            for m in re.finditer(r"`[^`\n]+`", region):
+                inline.append((ur_s + m.start(), ur_s + m.end(), m.group()))
+
+            # Images: ![alt](url)
+            for m in re.finditer(r"!\[[^\]]*\]\([^)]+\)", region):
+                inline.append((ur_s + m.start(), ur_s + m.end(), m.group()))
+
+            # Autolinks: <https://...>
+            for m in re.finditer(r"<(https?://[^>]+)>", region):
+                inline.append((ur_s + m.start(), ur_s + m.end(), m.group()))
+
+            # Reference links: [text][ref]
+            for m in re.finditer(r"\[[^\]]+\]\[[^\]]*\]", region):
+                inline.append((ur_s + m.start(), ur_s + m.end(), m.group()))
+
+            # VitePress template expressions: {{ ... }}
+            for m in re.finditer(r"\{\{[^}]+\}\}", region):
+                inline.append((ur_s + m.start(), ur_s + m.end(), m.group()))
+
+            # Links: [text](url) - protect URL part, keep text translatable
+            for m in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)", region):
+                full_s = ur_s + m.start()
+                full_e = ur_s + m.end()
+                # Skip if already covered by block protection
+                if any(full_s < bs and full_e > bs for bs, be, _ in merged):
+                    continue
+                # Protect the ](url) part so URL isn't translated
+                url_part_start = ur_s + m.start(2) - 1  # position of '('
+                url_part = m.group()[m.start(2) - m.start() - 1:]
+                inline.append((url_part_start, full_e, url_part))
+
+        # Merge inline into regions, deduplicate overlaps
+        all_regions = merged + inline
+        all_regions.sort(key=lambda r: (r[0], -(r[1] - r[0])))
+        final: list[tuple[int, int, str]] = []
+        for s, e, content in all_regions:
+            if final and s < final[-1][1]:
+                continue
+            final.append((s, e, content))
+
+        # Replace with placeholders
         result = []
         pos = 0
-        for s, e, content in merged:
+        for s, e, content in final:
             if s > pos:
                 result.append(text[pos:s])
             idx = len(self._items)
             self._items.append(content)
-            placeholder = self._placeholder(idx)
-            self._map[placeholder] = content
-            result.append(placeholder)
+            result.append(self._placeholder(idx))
             pos = e
         if pos < len(text):
             result.append(text[pos:])
@@ -328,6 +368,14 @@ class Protector:
         return errors
 
 
+def prose_only(text: str) -> str:
+    """Return only the translatable prose, stripping placeholders and formatting."""
+    text = re.sub(r"__PH_\d+__", "", text)
+    text = re.sub(r"#{1,6}\s*", "", text)
+    text = re.sub(r"[*_~`]", "", text)
+    return text.strip()
+
+
 # ============================================================
 # FRONTMATTER
 # ============================================================
@@ -343,7 +391,6 @@ def extract_frontmatter(md: str) -> Tuple[Optional[str], str]:
 def translate_frontmatter(fm: str, client: OpenAI, target_lang: str, cache: dict,
                           stats: dict, lock: threading.Lock) -> str:
     """Translate translatable values in YAML frontmatter."""
-    lang_full = LANGUAGES.get(target_lang, target_lang)
     lines = fm.split("\n")
     result = []
 
@@ -383,8 +430,8 @@ def translate_frontmatter(fm: str, client: OpenAI, target_lang: str, cache: dict
                 stats["cache_hits"] += 1
             translated = cached
         else:
-            translated = _call_api(client, value, target_lang)
-            translated = _post_process(translated, target_lang)
+            translated = call_api(client, value, target_lang)
+            translated = post_process(translated, target_lang)
             with lock:
                 cache_put(cache, value, target_lang, translated)
                 stats["api_requests"] += 1
@@ -406,7 +453,7 @@ def translate_frontmatter(fm: str, client: OpenAI, target_lang: str, cache: dict
 # API CALL + RETRY
 # ============================================================
 
-def _call_api(client: OpenAI, text: str, target_lang: str) -> str:
+def call_api(client: OpenAI, text: str, target_lang: str) -> str:
     """Call the translation API with retry logic."""
     lang_full = LANGUAGES.get(target_lang, target_lang)
     system_msg = (
@@ -442,6 +489,8 @@ def _call_api(client: OpenAI, text: str, target_lang: str) -> str:
             if e.status_code in {400, 401, 403, 404, 422}:
                 raise RuntimeError(f"API error {e.status_code}: {e.message[:300]}")
             last_error = f"HTTP {e.status_code}"
+        except RuntimeError:
+            raise
         except Exception as e:
             last_error = str(e)[:200]
 
@@ -457,7 +506,7 @@ def _call_api(client: OpenAI, text: str, target_lang: str) -> str:
 # POST-PROCESSING
 # ============================================================
 
-def _post_process(text: str, target_lang: str) -> str:
+def post_process(text: str, target_lang: str) -> str:
     if target_lang == "vi":
         text = re.sub(r"\s+([!?.,;:])", r"\1", text)
         text = re.sub(r"  +", " ", text)
@@ -485,17 +534,16 @@ def translate_markdown(
     protected_body = protector.protect(body)
 
     # Phase 2: Split into chunks for translation
-    # Send entire protected body as one request (placeholders reduce token count)
-    # If too long, split by double-newlines (paragraphs)
-    chunks = _split_into_chunks(protected_body)
+    chunks = split_into_chunks(protected_body)
 
     # Phase 3: Translate each chunk
     failed: list[str] = []
     translated_chunks: list[str] = []
 
     for chunk in chunks:
-        norm = re.sub(r"\s+", " ", chunk.strip())
-        if len(norm) < MIN_TEXT_LENGTH:
+        # Skip chunks with no translatable prose
+        prose = prose_only(chunk)
+        if len(prose) < MIN_TEXT_LENGTH:
             translated_chunks.append(chunk)
             continue
 
@@ -510,8 +558,8 @@ def translate_markdown(
             stats["cache_misses"] += 1
 
         try:
-            translated = _call_api(client, chunk, target_lang)
-            translated = _post_process(translated, target_lang)
+            translated = call_api(client, chunk, target_lang)
+            translated = post_process(translated, target_lang)
             with lock:
                 cache_put(cache, chunk, target_lang, translated)
                 stats["api_requests"] += 1
@@ -520,7 +568,7 @@ def translate_markdown(
         except Exception as e:
             print(f"      ERROR: {e}")
             translated_chunks.append(chunk)
-            failed.append(norm[:60])
+            failed.append(prose[:60])
 
     # Phase 4: Restore placeholders
     translated_body = "\n\n".join(translated_chunks)
@@ -540,16 +588,24 @@ def translate_markdown(
     return restored_body, failed
 
 
-def _split_into_chunks(text: str) -> list[str]:
-    """Split text into translatable chunks by double-newlines."""
+def split_into_chunks(text: str) -> list[str]:
+    """Split text into translatable chunks.
+
+    Strategy:
+    1. If under MAX_TEXT_LENGTH, send as one chunk
+    2. Split by double-newlines (paragraph boundaries)
+    3. Merge small adjacent chunks to avoid tiny API calls
+    """
     if len(text) <= MAX_TEXT_LENGTH:
         return [text]
 
-    chunks = []
-    current = []
+    # Split by paragraphs
+    paragraphs = text.split("\n\n")
+    chunks: list[str] = []
+    current: list[str] = []
     current_len = 0
 
-    for para in text.split("\n\n"):
+    for para in paragraphs:
         para_len = len(para)
         if current_len + para_len > MAX_TEXT_LENGTH and current:
             chunks.append("\n\n".join(current))
@@ -561,7 +617,34 @@ def _split_into_chunks(text: str) -> list[str]:
     if current:
         chunks.append("\n\n".join(current))
 
-    return chunks
+    # Merge small chunks with neighbors
+    return merge_small_chunks(chunks)
+
+
+def merge_small_chunks(chunks: list[str], min_size: int = 500) -> list[str]:
+    """Merge undersized chunks with their neighbors to avoid wasted API calls.
+
+    A chunk with less than min_size chars of prose gets absorbed into the
+    next chunk rather than triggering its own API call.
+    """
+    if len(chunks) <= 1:
+        return chunks
+
+    merged: list[str] = []
+    buf = chunks[0]
+
+    for chunk in chunks[1:]:
+        buf_prose = prose_only(buf)
+        if len(buf_prose) < min_size:
+            buf = buf + "\n\n" + chunk
+        else:
+            merged.append(buf)
+            buf = chunk
+
+    if buf:
+        merged.append(buf)
+
+    return merged
 
 
 # ============================================================
