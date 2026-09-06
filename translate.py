@@ -7,8 +7,8 @@ Translates English Markdown source files in docs/ to target languages
 using Poolside's Laguna XS 2.1 via OpenAI-compatible API.
 
 Key Optimizations for Laguna XS 2.1:
-- Exploits 256K context window (100K+ chars per request)
-- Batches multiple pages in single API call
+- Exploits 256K context window (100K+ chars per page)
+- Per-page translation (no cross-page batching)
 - MoE-aware temperature tuning (0.2 instead of 0)
 - Adaptive rate limiting for free tier
 - Validates placeholder coverage at scale
@@ -89,14 +89,12 @@ TIMEOUT = int(os.environ.get("TRANSLATION_TIMEOUT", "120"))
 MAX_RETRIES = int(os.environ.get("TRANSLATION_MAX_RETRIES", "5"))
 RETRY_DELAYS = [2, 4, 8, 16, 32]
 
-CACHE_VERSION = 6  # Bumped for new batching strategy
+CACHE_VERSION = 6
 REQUEST_DELAY = 1.5  # NVIDIA NIM 40 RPM = ~1.5s between requests
 MAX_TOKENS = 32768  # Use full output window
 MIN_TEXT_LENGTH = 2
-MAX_TEXT_LENGTH = 100000  # 256K context - send huge chunks
+MAX_TEXT_LENGTH = 100000  # 256K context - send large single pages
 MIN_CHUNK_PROSE = 50
-BATCH_SIZE = 2  # Translate 2 pages per API call
-BATCH_TIMEOUT = 60  # Wait up to 60s for batch to fill
 
 LANGUAGES = {
     "vi": "Vietnamese",
@@ -587,120 +585,68 @@ def post_process(text: str, target_lang: str) -> str:
     return text
 
 
-# ============================================================
-# BATCHED TRANSLATION
-# ============================================================
-
-class PageBatch:
-    """Batch multiple pages for single API call."""
-
-    def __init__(self):
-        self.pages: list[tuple[str, str, Path, Protector]] = []  # (md_content, rel, path, protector)
-        self.total_chars = 0
-
-    def can_add(self, md_content: str) -> bool:
-        """Check if page can fit in batch."""
-        _, body = extract_frontmatter(md_content)
-        protector = Protector()
-        protected = protector.protect(body)
-        
-        # Estimate tokens (rough: 1 token ≈ 4 chars)
-        est_tokens = len(protected) / 4
-        current_tokens = self.total_chars / 4
-        
-        # Leave 50K tokens headroom for markers, system prompt, output
-        return (current_tokens + est_tokens) < 200000
-
-    def add(self, md_content: str, rel: Path) -> None:
-        """Add page to batch."""
-        _, body = extract_frontmatter(md_content)
-        protector = Protector()
-        protected = protector.protect(body)
-        
-        self.pages.append((md_content, protected, rel, protector))
-        self.total_chars += len(protected)
-
-    def is_full(self) -> bool:
-        """Check if batch is at target size."""
-        return len(self.pages) >= BATCH_SIZE
-
-    def is_empty(self) -> bool:
-        return len(self.pages) == 0
-
-    def to_api_request(self) -> str:
-        """Format batch for API request."""
-        parts = []
-        for i, (_, protected, rel, _) in enumerate(self.pages):
-            parts.append(f"---PAGE_{i}_START---{rel.as_posix()}---\n{protected}\n---PAGE_{i}_END---\n")
-        return "\n".join(parts)
-
-    def parse_response(self, response: str) -> dict[Path, str]:
-        """Parse API response back into pages."""
-        results = {}
-        
-        for i, (_, _, rel, protector) in enumerate(self.pages):
-            # Extract page content
-            pattern = rf"---PAGE_{i}_START---[^\n]*\n(.*?)\n---PAGE_{i}_END---"
-            match = re.search(pattern, response, re.DOTALL)
-            
-            if match:
-                translated = match.group(1)
-                restored = protector.restore(translated)
-                results[rel] = restored
-            else:
-                print(f"      WARNING: Could not parse page {i} ({rel}) from response")
-                results[rel] = None
-        
-        return results
 
 
-def translate_markdown_batch(
-    batch: PageBatch,
+
+def translate_markdown(
+    md: str,
     target_lang: str,
     client: OpenAI,
     cache: dict,
     stats: dict,
     lock: threading.Lock,
-) -> Tuple[dict[Path, str], List[str]]:
-    """Translate an entire batch via single API call."""
-    if batch.is_empty():
-        return {}, []
+) -> Tuple[str, List[str]]:
+    """Translate a full Markdown document. Returns (translated, failed_list)."""
+    fm, body = extract_frontmatter(md)
 
-    failed = []
-    request_text = batch.to_api_request()
+    # Phase 1: Protect non-translatable content
+    protector = Protector()
+    protected_body = protector.protect(body)
 
-    # Check cache first
-    cached = cache_get(cache, request_text, target_lang)
+    # Phase 2: Translate entire page as single chunk (exploit 256K context)
+    failed: list[str] = []
+    
+    prose = prose_only(protected_body)
+    if len(prose) < MIN_TEXT_LENGTH:
+        # Skip pages with no translatable prose
+        return md, []
+
+    # Check cache
+    cached = cache_get(cache, protected_body, target_lang)
     if cached is not None:
         with lock:
             stats["cache_hits"] += 1
-        return batch.parse_response(cached), []
-
-    with lock:
-        stats["cache_misses"] += 1
-
-    try:
-        translated = call_api(client, request_text, target_lang)
-        translated = post_process(translated, target_lang)
-        
+        translated_body = cached
+    else:
         with lock:
-            cache_put(cache, request_text, target_lang, translated)
-            stats["api_requests"] += 1
+            stats["cache_misses"] += 1
         
-        results = batch.parse_response(translated)
-        
-        # Track failures
-        for rel, content in results.items():
-            if content is None:
-                prose = prose_only(request_text)
-                failed.append(prose[:60])
-        
-        return results, failed
+        try:
+            translated_body = call_api(client, protected_body, target_lang)
+            translated_body = post_process(translated_body, target_lang)
+            with lock:
+                cache_put(cache, protected_body, target_lang, translated_body)
+                stats["api_requests"] += 1
+        except Exception as e:
+            print(f"      ERROR: {e}")
+            translated_body = protected_body
+            failed.append(prose[:60])
 
-    except Exception as e:
-        print(f"      ERROR in batch: {e}")
-        failed.append(str(e)[:60])
-        return {}, failed
+    # Phase 3: Restore placeholders
+    restored_body = protector.restore(translated_body)
+
+    # Phase 4: Validate
+    validation_errors = protector.validate_restored(body, restored_body)
+    if validation_errors:
+        for err in validation_errors:
+            print(f"      VALIDATION: {err}")
+
+    # Phase 5: Translate frontmatter
+    if fm:
+        translated_fm = translate_frontmatter(fm, client, target_lang, cache, stats, lock)
+        return translated_fm + restored_body, failed
+
+    return restored_body, failed
 
 
 # ============================================================
@@ -836,6 +782,8 @@ def parse_args():
                    help="Force retranslation (still uses string cache)")
     p.add_argument("--strict", action="store_true",
                    help="Fail on any translation error")
+    p.add_argument("--skip-validation", action="store_true",
+                   help="Skip API key validation (for faster CI builds)")
     return p.parse_args()
 
 
@@ -858,22 +806,38 @@ def main():
         sys.exit(1)
 
     # Validate API key
-    if not args.dry_run and API_KEY:
-        print("Validating API key...")
-        try:
-            client = get_client()
-            client.chat.completions.create(
-                model=MODEL,
-                messages=[{"role": "user", "content": "Hello"}],
-                max_tokens=10,
-            )
-            print("API key OK.")
-        except Exception as e:
-            err_str = str(e)
-            if "403" in err_str or "401" in err_str:
-                print(f"ERROR: API key is invalid or expired: {e}")
-                sys.exit(1)
-            print(f"WARNING: Could not validate API key: {e}")
+    if not args.dry_run and not args.skip_validation and API_KEY:
+        validation_cache = DOCS_DIR / ".vitepress" / ".api-validation"
+        validation_age = 0
+        
+        if validation_cache.exists():
+            validation_age = time.time() - validation_cache.stat().st_mtime
+        
+        # Skip validation if done in last 24 hours
+        if validation_age > 86400 or not validation_cache.exists():
+            print("Validating API key...")
+            try:
+                client = get_client()
+                client.chat.completions.create(
+                    model=MODEL,
+                    messages=[{"role": "user", "content": "Hello"}],
+                    max_tokens=10,
+                )
+                print("API key OK.")
+                validation_cache.parent.mkdir(parents=True, exist_ok=True)
+                validation_cache.touch()
+            except Exception as e:
+                err_str = str(e)
+                if "403" in err_str or "401" in err_str:
+                    print(f"ERROR: API key is invalid or expired: {e}")
+                    sys.exit(1)
+                print(f"WARNING: Could not validate API key: {e}")
+        else:
+            print(f"API key validation cached ({validation_age/3600:.1f}h ago)")
+            print("Skipping validation...")
+    elif args.skip_validation:
+        print("Skipping API key validation (--skip-validation)")
+
 
     # Clear cache
     if args.clear_cache:
@@ -907,7 +871,7 @@ def main():
     print(f"Languages: {', '.join(requested)}")
     print(f"Workers:   {args.workers}")
     print(f"Model:     {MODEL}")
-    print(f"Batch:     {BATCH_SIZE} pages/call, {MAX_TEXT_LENGTH} chars/request")
+    print(f"Strategy:  Per-page translation, {MAX_TEXT_LENGTH} chars/page max")
     print()
 
     if args.dry_run:
@@ -962,58 +926,27 @@ def main():
             client = get_client()
             lang_failures: list[str] = []
 
-            def do_task(batch_data: tuple[int, list[tuple[Path, str]]]) -> tuple[int, dict[Path, str], list[str], float]:
-                batch_idx, batch_tasks = batch_data
-                batch = PageBatch()
-                
-                for md_path, h in batch_tasks:
-                    md = md_path.read_text(encoding="utf-8")
-                    batch.add(md, md_path.relative_to(docs))
-                
+            def do_task(task: tuple[Path, str]) -> tuple[str, bool, list[str]]:
+                md_path, h = task
+                rel = md_path.relative_to(docs)
                 t0 = time.time()
-                results, failed = translate_markdown_batch(
-                    batch, lang, client, cache, lang_stats, lang_lock
+                md = md_path.read_text(encoding="utf-8")
+                translated, failed = translate_markdown(
+                    md, lang, client, cache, lang_stats, lang_lock
                 )
+                translated = fix_relative_paths(translated, rel)
+                out_dir = docs / lang / rel.parent
+                atomic_write(out_dir / md_path.name, translated)
                 elapsed = time.time() - t0
-                
-                # Write results
-                for rel, translated in results.items():
-                    if translated is None:
-                        continue
-                    
-                    md_path = docs / rel
-                    translated = fix_relative_paths(translated, rel)
-                    out_dir = docs / lang / rel.parent
-                    atomic_write(out_dir / md_path.name, translated)
-                    
-                    # Find original to mark done
-                    orig_rel = str(rel)
-                    for orig_path, _ in batch_tasks:
-                        if str(orig_path.relative_to(docs)) == orig_rel:
-                            with lang_lock:
-                                page_mark_done(state, orig_rel, file_hash(orig_path), lang)
-                            break
-                
-                print(f"  Batch {batch_idx}: {len(results)} pages ({elapsed:.1f}s)")
-                return batch_idx, results, failed, elapsed
-
-            # Batch tasks
-            batches = []
-            current_batch = []
-            for task in tasks:
-                if len(current_batch) >= BATCH_SIZE:
-                    batches.append(current_batch)
-                    current_batch = []
-                current_batch.append(task)
-            if current_batch:
-                batches.append(current_batch)
-
-            batch_tasks = [(i, b) for i, b in enumerate(batches)]
+                with lang_lock:
+                    page_mark_done(state, str(rel), h, lang)
+                print(f"  {str(rel):50s} DONE ({elapsed:.1f}s)")
+                return str(rel), len(failed) == 0, failed
 
             if args.workers <= 1:
-                for batch_task in batch_tasks:
+                for task in tasks:
                     try:
-                        _, results, failed, _ = do_task(batch_task)
+                        rel, success, failed = do_task(task)
                         if failed:
                             lang_failures.extend(failed)
                     except Exception as e:
@@ -1022,10 +955,10 @@ def main():
                             sys.exit(1)
             else:
                 with ThreadPoolExecutor(max_workers=args.workers) as pool:
-                    futures = {pool.submit(do_task, bt): bt for bt in batch_tasks}
+                    futures = {pool.submit(do_task, t): t for t in tasks}
                     for future in as_completed(futures):
                         try:
-                            _, results, failed, _ = future.result()
+                            rel, success, failed = future.result()
                             if failed:
                                 lang_failures.extend(failed)
                         except Exception as e:
