@@ -74,7 +74,7 @@ CACHE_FILE = DOCS_DIR / ".vitepress" / "translation-cache.json"
 STATE_FILE = DOCS_DIR / ".vitepress" / "translation-state.json"
 
 NIM_ENDPOINT = "https://integrate.api.nvidia.com/v1/chat/completions"
-NIM_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"
+NIM_MODEL = "openai/gpt-oss-20b"
 
 API_KEY = os.environ.get("NVIDIA_API_KEY", "").strip()
 
