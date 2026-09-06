@@ -4,7 +4,7 @@ VitePress Markdown Translator
 ==============================
 
 Translates English Markdown source files in docs/ to target languages
-using NVIDIA NIM (Riva Translate 4B Instruct v2).
+using NVIDIA NIM.
 
 Workflow:
 
@@ -74,11 +74,11 @@ CACHE_FILE = DOCS_DIR / ".vitepress" / "translation-cache.json"
 STATE_FILE = DOCS_DIR / ".vitepress" / "translation-state.json"
 
 NIM_ENDPOINT = "https://integrate.api.nvidia.com/v1/chat/completions"
-NIM_MODEL = "nvidia/riva-translate-4b-instruct-v2"
+NIM_MODEL = "openai/gpt-oss-20b"
 
 API_KEY = os.environ.get("NVIDIA_API_KEY", "").strip()
 
-CACHE_VERSION = 2  # Bump when improving translation prompts
+CACHE_VERSION = 3  # Bump when changing models or translation prompts
 
 # Languages
 LANGUAGES = {
@@ -88,16 +88,6 @@ LANGUAGES = {
     "de": "German",
     "ja": "Japanese",
     "ko": "Korean",
-}
-
-# NVIDIA prompt codes
-LANG_PROMPT = {
-    "vi": "vi",
-    "es-US": "es-us",
-    "fr": "fr",
-    "de": "de",
-    "ja": "ja",
-    "ko": "ko",
 }
 
 # Request settings
@@ -240,25 +230,45 @@ def page_mark_done(state: dict, rel_path: str, source_hash: str, lang: str) -> N
 # ============================================================
 
 def nim_translate(text: str, target_lang: str, api_key: str) -> str:
-    """Translate one text unit via NVIDIA NIM chat completions with improved prompting."""
-    prompt_code = LANG_PROMPT.get(target_lang, target_lang.lower())
+    """Translate one text unit via OpenAI-compatible API."""
     lang_full = LANGUAGES.get(target_lang, target_lang)
 
-    # Domain-aware system prompt for better quality
     system_prompt = (
-        f"You are translating technical blog content about Linux, self-hosting, "
-        f"gaming, and software development.\n"
-        f"Target language: {lang_full}\n\n"
-        f"Requirements:\n"
-        f"1. Preserve ALL markdown syntax exactly (links, code blocks, emphasis, etc.)\n"
-        f"2. Keep technical terms consistent with {lang_full} conventions\n"
-        f"3. Maintain the casual, friendly tone of the original\n"
-        f"4. Expand contractions naturally in the target language\n"
-        f"5. Fix spacing around punctuation per {lang_full} style\n"
-        f"6. Keep sentences flowing naturally\n"
-        f"7. Do NOT add explanations or commentary\n"
-        f"8. Do NOT alter any URLs, code, or HTML tags\n"
-        f"9. Do NOT translate proper nouns, brand names, or code identifiers"
+        f"You are a professional technical documentation translator.\n\n"
+        f"Translate the provided documentation from English to {lang_full}.\n\n"
+        f"Your ONLY task is translation. Do not explain, summarize, rewrite, "
+        f"review, improve, or comment on the source.\n\n"
+        f"Preserve the original meaning, technical accuracy, structure, "
+        f"formatting, and tone.\n\n"
+        f"CRITICAL PRESERVATION RULES:\n"
+        f"1. NEVER modify YAML frontmatter keys.\n"
+        f"2. Preserve frontmatter structure and valid YAML.\n"
+        f"3. NEVER translate or modify URLs.\n"
+        f"4. NEVER modify file paths or image paths.\n"
+        f"5. NEVER modify filenames or anchors.\n"
+        f"6. NEVER translate or modify code, fenced code blocks, inline code, "
+        f"shell commands, or programming-language syntax.\n"
+        f"7. NEVER modify variable names, function names, class names, "
+        f"API names, package names, or environment variables.\n"
+        f"8. NEVER modify HTML tags, HTML attributes, Vue components, "
+        f"or VitePress components.\n"
+        f"9. NEVER modify VitePress container syntax such as "
+        f"'::: tip', '::: warning', '::: danger', or ':::'.\n\n"
+        f"Only translate human-readable prose.\n\n"
+        f"For technical terminology, prefer the commonly used {lang_full} "
+        f"technical term when one exists. Otherwise retain the original "
+        f"English technical term.\n\n"
+        f"Keep terminology consistent throughout the document.\n"
+        f"Do not invent information that is not present in the source.\n"
+        f"Do not remove information.\n"
+        f"Do not add information.\n"
+        f"Do not change the order of sections.\n"
+        f"Do not change Markdown structure.\n"
+        f"Do not convert Markdown into another format.\n"
+        f"Do not add translator notes.\n"
+        f"Do not surround the translation with quotes.\n"
+        f"Do not prepend text such as 'Translation:'.\n"
+        f"Return ONLY the translated document."
     )
 
     payload = {

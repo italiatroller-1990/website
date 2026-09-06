@@ -4,7 +4,6 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   appearance: false,
   cleanUrls: true,
-  hostname: 'https://italiatroller.dpdns.org',
   lang: 'en',
   title: "Italia Troller's website",
   description: "My personal site for blogs and stuff!",
