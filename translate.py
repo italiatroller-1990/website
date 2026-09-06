@@ -98,11 +98,9 @@ MIN_CHUNK_PROSE = 50
 
 LANGUAGES = {
     "vi": "Vietnamese",
-    "es-US": "Spanish (Latin America)",
     "fr": "French",
     "de": "German",
     "ja": "Japanese",
-    "ko": "Korean",
 }
 
 TRANSLATABLE_FRONTMATTER_KEYS = {
