@@ -35,7 +35,6 @@ var translatableFMKeys = map[string]struct{}{
 
 var placeholderPattern = regexp.MustCompile(`__PH_\d+__`)
 
-
 type options struct {
 	Langs          string
 	Docs           string
@@ -49,7 +48,7 @@ type options struct {
 }
 
 type cacheData struct {
-	V int                `json:"v"`
+	V int                   `json:"v"`
 	E map[string]cacheEntry `json:"e"`
 }
 
@@ -59,7 +58,7 @@ type cacheEntry struct {
 }
 
 type stateData struct {
-	V int                    `json:"v"`
+	V int                   `json:"v"`
 	P map[string]pageStatus `json:"p"`
 }
 
@@ -75,9 +74,9 @@ type pageTask struct {
 }
 
 type stats struct {
-	CacheHits    int
-	CacheMisses  int
-	APIRequests  int
+	CacheHits   int
+	CacheMisses int
+	APIRequests int
 }
 
 func main() {
@@ -172,8 +171,12 @@ Options:
 		}
 		if len(issues) > 0 {
 			fmt.Println("VALIDATION ERRORS:")
-			for _, item := range issues { fmt.Println("  " + item) }
-			if cfg.Strict { os.Exit(1) }
+			for _, item := range issues {
+				fmt.Println("  " + item)
+			}
+			if cfg.Strict {
+				os.Exit(1)
+			}
 		}
 	}
 
@@ -189,10 +192,14 @@ Options:
 		for _, mdPath := range pages {
 			rel := relPath(docsDir, mdPath)
 			h, err := fileHash(mdPath)
-			if err != nil { fatal(err) }
+			if err != nil {
+				fatal(err)
+			}
 			if !pageNeedsTranslation(state, rel, h, lang, cfg.Force) {
 				pagesSkipped++
-				if !cfg.DryRun { fmt.Printf("  %-50s SKIP\n", rel) }
+				if !cfg.DryRun {
+					fmt.Printf("  %-50s SKIP\n", rel)
+				}
 				continue
 			}
 			pagesTranslated++
@@ -212,13 +219,19 @@ Options:
 				translated, err := translateOnePage(task.MDPath, lang, cache, stats, cfg.Strict)
 				if err != nil {
 					fmt.Printf("      ERROR: %v\n", err)
-					if cfg.Strict { os.Exit(1) }
+					if cfg.Strict {
+						os.Exit(1)
+					}
 					continue
 				}
 				fixed := fixRelativePaths(translated, task.Rel)
 				outPath := filepath.Join(docsDir, lang, task.Rel)
-				if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil { fatal(err) }
-				if err := os.WriteFile(outPath, []byte(fixed), 0o644); err != nil { fatal(err) }
+				if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+					fatal(err)
+				}
+				if err := os.WriteFile(outPath, []byte(fixed), 0o644); err != nil {
+					fatal(err)
+				}
 				pageMarkDone(state, task.Rel, task.Hash, lang)
 				fmt.Printf("  %-50s DONE (%ss)\n", task.Rel, strconv.FormatFloat(time.Since(t0).Seconds(), 'f', 1, 64))
 			}
@@ -238,7 +251,9 @@ Options:
 	fmt.Printf("Cache:  %s\n", filepath.Join(docsDir, ".vitepress", "translation-cache.json"))
 	fmt.Printf("State:  %s\n", filepath.Join(docsDir, ".vitepress", "translation-state.json"))
 	fmt.Printf("Output: %s/{lang}/\n", docsDir)
-	if cfg.Strict { fmt.Println("Mode:   STRICT (errors cause exit)") }
+	if cfg.Strict {
+		fmt.Println("Mode:   STRICT (errors cause exit)")
+	}
 	fmt.Println()
 }
 
@@ -261,7 +276,9 @@ func parseArgs() options {
 
 func sortedKeys(m map[string]string) []string {
 	keys := make([]string, 0, len(m))
-	for k := range m { keys = append(keys, k) }
+	for k := range m {
+		keys = append(keys, k)
+	}
 	sort.Strings(keys)
 	return keys
 }
@@ -271,62 +288,92 @@ func splitCSV(s string) []string {
 	res := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
-		if p != "" { res = append(res, p) }
+		if p != "" {
+			res = append(res, p)
+		}
 	}
 	return res
 }
 
 func relPath(base, path string) string {
 	p, err := filepath.Rel(base, path)
-	if err != nil { return path }
+	if err != nil {
+		return path
+	}
 	return filepath.ToSlash(p)
 }
 
 func fileHash(path string) (string, error) {
 	f, err := os.Open(path)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	defer f.Close()
 	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil { return "", err }
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func loadCache(path string) map[string]cacheEntry {
 	data := cacheData{V: cacheVersion, E: map[string]cacheEntry{}}
 	b, err := os.ReadFile(path)
-	if err != nil || len(b) == 0 { return data.E }
+	if err != nil || len(b) == 0 {
+		return data.E
+	}
 	if err := json.Unmarshal(b, &data); err == nil {
-		if data.V == cacheVersion && data.E != nil { return data.E }
+		if data.V == cacheVersion && data.E != nil {
+			return data.E
+		}
 	}
 	return map[string]cacheEntry{}
 }
 
 func saveCache(path string, data map[string]cacheEntry) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { panic(err) }
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		panic(err)
+	}
 	b, err := json.Marshal(cacheData{V: cacheVersion, E: data})
-	if err != nil { panic(err) }
-	if err := os.WriteFile(path, b, 0o644); err != nil { panic(err) }
+	if err != nil {
+		panic(err)
+	}
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		panic(err)
+	}
 }
 
 func loadState(path string) map[string]pageStatus {
 	data := stateData{V: cacheVersion, P: map[string]pageStatus{}}
 	b, err := os.ReadFile(path)
-	if err != nil || len(b) == 0 { return data.P }
+	if err != nil || len(b) == 0 {
+		return data.P
+	}
 	if err := json.Unmarshal(b, &data); err == nil {
-		if data.V == cacheVersion && data.P != nil { return data.P }
+		if data.V == cacheVersion && data.P != nil {
+			return data.P
+		}
 	}
 	return map[string]pageStatus{}
 }
 
 func saveState(path string, data map[string]pageStatus) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { panic(err) }
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		panic(err)
+	}
 	b, err := json.Marshal(stateData{V: cacheVersion, P: data})
-	if err != nil { panic(err) }
-	if err := os.WriteFile(path, b, 0o644); err != nil { panic(err) }
+	if err != nil {
+		panic(err)
+	}
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		panic(err)
+	}
 }
 
 func pageNeedsTranslation(state map[string]pageStatus, rel, h, lang string, force bool) bool {
-	if force { return true }
+	if force {
+		return true
+	}
 	entry, ok := state[lang+":"+rel]
 	return !ok || entry.H != h
 }
@@ -338,7 +385,7 @@ func pageMarkDone(state map[string]pageStatus, rel, h, lang string) {
 func protect(text string) (string, map[int]string) {
 	patterns := []*regexp.Regexp{
 		regexp.MustCompile("(```[\\s\\S]*?```|````[\\s\\S]*?````|~~~[\\s\\S]*?~~~|~~~~[\\s\\S]*?~~~~)"),
-		regexp.MustCompile("(?m)^:::\\s*(?:tip|info|warning|danger|details)\\b.*?^:::") ,
+		regexp.MustCompile("(?m)^:::\\s*(?:tip|info|warning|danger|details)\\b.*?^:::"),
 		regexp.MustCompile("(?is)<script[\\s\\S]*?</script>"),
 		regexp.MustCompile("(?is)<style[\\s\\S]*?</style>"),
 		regexp.MustCompile("(?is)<!--[\\s\\S]*?-->"),
@@ -353,7 +400,9 @@ func protect(text string) (string, map[int]string) {
 	cursor := 0
 	for _, re := range patterns {
 		for _, match := range re.FindAllStringSubmatchIndex(text, -1) {
-			if match[0] < cursor { continue }
+			if match[0] < cursor {
+				continue
+			}
 			parts = append(parts, text[cursor:match[0]])
 			segment := text[match[0]:match[1]]
 			idx := len(items)
@@ -362,14 +411,20 @@ func protect(text string) (string, map[int]string) {
 			cursor = match[1]
 		}
 	}
-	if cursor < len(text) { parts = append(parts, text[cursor:]) }
+	if cursor < len(text) {
+		parts = append(parts, text[cursor:])
+	}
 	return strings.Join(parts, ""), items
 }
 
 func restore(text string, items map[int]string) string {
-	if len(items) == 0 { return text }
+	if len(items) == 0 {
+		return text
+	}
 	keys := make([]int, 0, len(items))
-	for k := range items { keys = append(keys, k) }
+	for k := range items {
+		keys = append(keys, k)
+	}
 	sort.Sort(sort.Reverse(sort.IntSlice(keys)))
 	for _, idx := range keys {
 		text = strings.ReplaceAll(text, fmt.Sprintf("__PH_%d__", idx), items[idx])
@@ -379,9 +434,13 @@ func restore(text string, items map[int]string) string {
 
 func validatePlaceholders(original, restored string) []string {
 	origSet := map[string]int{}
-	for _, ph := range placeholderPattern.FindAllString(original, -1) { origSet[ph]++ }
+	for _, ph := range placeholderPattern.FindAllString(original, -1) {
+		origSet[ph]++
+	}
 	restSet := map[string]int{}
-	for _, ph := range placeholderPattern.FindAllString(restored, -1) { restSet[ph]++ }
+	for _, ph := range placeholderPattern.FindAllString(restored, -1) {
+		restSet[ph]++
+	}
 	var errs []string
 	for ph, count := range origSet {
 		if inRest := restSet[ph]; inRest == 0 {
@@ -391,14 +450,18 @@ func validatePlaceholders(original, restored string) []string {
 		}
 	}
 	for ph := range restSet {
-		if _, ok := origSet[ph]; !ok { errs = append(errs, "Unknown placeholder: "+ph) }
+		if _, ok := origSet[ph]; !ok {
+			errs = append(errs, "Unknown placeholder: "+ph)
+		}
 	}
 	return errs
 }
 
 func proseLength(text string) int {
 	text = strings.Map(func(r rune) rune {
-		if r == '*' || r == '_' || r == '~' || r == '`' { return -1 }
+		if r == '*' || r == '_' || r == '~' || r == '`' {
+			return -1
+		}
 		return r
 	}, text)
 	text = strings.TrimSpace(text)
@@ -406,9 +469,13 @@ func proseLength(text string) int {
 }
 
 func extractFrontmatter(md string) (string, string) {
-	if !strings.HasPrefix(md, "---\n") { return "", md }
+	if !strings.HasPrefix(md, "---\n") {
+		return "", md
+	}
 	end := strings.Index(md[4:], "\n---\n")
-	if end == -1 { return "", md }
+	if end == -1 {
+		return "", md
+	}
 	end += 4
 	return md[:end+5], md[end+5:]
 }
@@ -448,7 +515,9 @@ func translateFrontmatter(fm string, targetLang string, cache map[string]cacheEn
 			stats.CacheHits++
 		} else {
 			tr, err := callAPI(value, targetLang)
-			if err != nil { return "", err }
+			if err != nil {
+				return "", err
+			}
 			translated = postProcess(tr, targetLang)
 			cachePut(cache, value, targetLang, translated)
 			stats.CacheMisses++
@@ -456,10 +525,16 @@ func translateFrontmatter(fm string, targetLang string, cache map[string]cacheEn
 		}
 
 		q := quote
-		if q == "" { q = `"` }
+		if q == "" {
+			q = `"`
+		}
 		escaped := translated
-		if q == `"` { escaped = strings.ReplaceAll(escaped, `"`, `\\"`) }
-		if q == "'" { escaped = strings.ReplaceAll(escaped, `'`, `\\'`) }
+		if q == `"` {
+			escaped = strings.ReplaceAll(escaped, `"`, `\\"`)
+		}
+		if q == "'" {
+			escaped = strings.ReplaceAll(escaped, `'`, `\\'`)
+		}
 		result = append(result, strings.TrimRight(keyPart, " ")+" "+q+escaped+q)
 	}
 	return strings.Join(result, "\n"), nil
@@ -482,7 +557,9 @@ func sha256Hex(s string) string {
 
 func cacheGet(cache map[string]cacheEntry, text, target string) (string, bool) {
 	entry, ok := cache[cacheKey(text, target)]
-	if !ok || entry.R == "" { return "", false }
+	if !ok || entry.R == "" {
+		return "", false
+	}
 	return entry.R, true
 }
 
@@ -500,7 +577,9 @@ func postProcess(text, targetLang string) string {
 
 func translateOnePage(mdPath, lang string, cache map[string]cacheEntry, stats *stats, strict bool) (string, error) {
 	md, err := os.ReadFile(mdPath)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	text := string(md)
 	fmText, body := extractFrontmatter(text)
 	protectedBody, items := protect(body)
@@ -514,7 +593,9 @@ func translateOnePage(mdPath, lang string, cache map[string]cacheEntry, stats *s
 	} else {
 		stats.CacheMisses++
 		tr, err := callAPI(protectedBody, lang)
-		if err != nil { return "", err }
+		if err != nil {
+			return "", err
+		}
 		translatedBody = postProcess(tr, lang)
 		cachePut(cache, protectedBody, lang, translatedBody)
 		stats.APIRequests++
@@ -523,15 +604,23 @@ func translateOnePage(mdPath, lang string, cache map[string]cacheEntry, stats *s
 	restoredBody := restore(translatedBody, items)
 	errs := validatePlaceholders(protectedBody, restoredBody)
 	if len(errs) > 0 {
-		for _, err := range errs { fmt.Printf("      VALIDATION: %s\n", err) }
-		if strict { return "", errors.New(errs[0]) }
-		if fmText != "" { return fmText + restore(protectedBody, items), nil }
+		for _, err := range errs {
+			fmt.Printf("      VALIDATION: %s\n", err)
+		}
+		if strict {
+			return "", errors.New(errs[0])
+		}
+		if fmText != "" {
+			return fmText + restore(protectedBody, items), nil
+		}
 		return restore(protectedBody, items), nil
 	}
 
 	if fmText != "" {
 		translatedFM, err := translateFrontmatter(fmText, lang, cache, stats)
-		if err != nil { return "", err }
+		if err != nil {
+			return "", err
+		}
 		return translatedFM + restoredBody, nil
 	}
 	return restoredBody, nil
@@ -540,7 +629,9 @@ func translateOnePage(mdPath, lang string, cache map[string]cacheEntry, stats *s
 func fixRelativePaths(md, sourceRel string) string {
 	parts := strings.Split(filepath.ToSlash(sourceRel), "/")
 	depth := len(parts) - 1
-	if depth <= 0 { return md }
+	if depth <= 0 {
+		return md
+	}
 	extra := strings.Repeat("../", depth)
 	md = regexp.MustCompile(`(?:from|require)\s*\(\s*['"](\.\.[^'"]+)['"]`).ReplaceAllStringFunc(md, func(match string) string {
 		return strings.Replace(match, "../", extra, 1)
@@ -553,7 +644,9 @@ func fixRelativePaths(md, sourceRel string) string {
 
 func preValidatePage(mdPath string) []string {
 	file, err := os.Open(mdPath)
-	if err != nil { return nil }
+	if err != nil {
+		return nil
+	}
 	defer file.Close()
 	issues := []string{}
 	backtickCount := 0
@@ -564,29 +657,47 @@ func preValidatePage(mdPath string) []string {
 		if n > 0 {
 			text := string(buffer[:n])
 			for i := 0; i < len(text)-2; i++ {
-				if text[i] == '`' && text[i+1] == '`' && text[i+2] == '`' { backtickCount++ }
+				if text[i] == '`' && text[i+1] == '`' && text[i+2] == '`' {
+					backtickCount++
+				}
 			}
 			placeholderCount += len(placeholderPattern.FindAllString(text, -1))
 		}
-		if errors.Is(err, io.EOF) { break }
-		if err != nil { break }
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			break
+		}
 	}
-	if placeholderCount > 0 { issues = append(issues, fmt.Sprintf("Already has %d placeholders", placeholderCount)) }
-	if backtickCount%2 != 0 { issues = append(issues, "Unmatched code blocks") }
+	if placeholderCount > 0 {
+		issues = append(issues, fmt.Sprintf("Already has %d placeholders", placeholderCount))
+	}
+	if backtickCount%2 != 0 {
+		issues = append(issues, "Unmatched code blocks")
+	}
 	return issues
 }
 
 func findSourcePages(docsDir string, langDirs map[string]string) []string {
 	var pages []string
 	_ = filepath.WalkDir(docsDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil { return nil }
+		if err != nil {
+			return nil
+		}
 		if d.IsDir() {
-			if d.Name() == ".vitepress" { return filepath.SkipDir }
-			if _, ok := langDirs[d.Name()]; ok { return filepath.SkipDir }
+			if d.Name() == ".vitepress" {
+				return filepath.SkipDir
+			}
+			if _, ok := langDirs[d.Name()]; ok {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if filepath.Ext(path) == ".md" {
-			if strings.Contains(filepath.Base(path), "[") { return nil }
+			if strings.Contains(filepath.Base(path), "[") {
+				return nil
+			}
 			pages = append(pages, path)
 		}
 		return nil
@@ -597,32 +708,46 @@ func findSourcePages(docsDir string, langDirs map[string]string) []string {
 
 func validateAPIKey() error {
 	apiKey := strings.TrimSpace(os.Getenv("TRANSLATION_API_KEY"))
-	if apiKey == "" { apiKey = strings.TrimSpace(os.Getenv("NVIDIA_API_KEY")) }
-	if apiKey == "" { return errors.New("missing API key") }
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("NVIDIA_API_KEY"))
+	}
+	if apiKey == "" {
+		return errors.New("missing API key")
+	}
 	return nil
 }
 
 func modelName() string {
-	if v := strings.TrimSpace(os.Getenv("TRANSLATION_MODEL")); v != "" { return v }
+	if v := strings.TrimSpace(os.Getenv("TRANSLATION_MODEL")); v != "" {
+		return v
+	}
 	return defaultModel
 }
 
 func baseURL() string {
-	if v := strings.TrimSpace(os.Getenv("TRANSLATION_BASE_URL")); v != "" { return v }
+	if v := strings.TrimSpace(os.Getenv("TRANSLATION_BASE_URL")); v != "" {
+		return v
+	}
 	return defaultBaseURL
 }
 
 func timeoutSeconds() int {
 	if v := strings.TrimSpace(os.Getenv("TRANSLATION_TIMEOUT")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 { return n }
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
 	}
 	return defaultTimeoutSeconds
 }
 
 func callAPI(text, targetLang string) (string, error) {
 	apiKey := strings.TrimSpace(os.Getenv("TRANSLATION_API_KEY"))
-	if apiKey == "" { apiKey = strings.TrimSpace(os.Getenv("NVIDIA_API_KEY")) }
-	if apiKey == "" { return "", errors.New("missing API key") }
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("NVIDIA_API_KEY"))
+	}
+	if apiKey == "" {
+		return "", errors.New("missing API key")
+	}
 
 	payload := map[string]any{
 		"model": modelName(),
@@ -631,20 +756,26 @@ func callAPI(text, targetLang string) (string, error) {
 			{"role": "user", "content": text},
 		},
 		"temperature": 1,
-		"top_p":      0.95,
-		"max_tokens": MAX_TOKENS,
-		"stream":     false,
+		"top_p":       0.95,
+		"max_tokens":  MAX_TOKENS,
+		"stream":      false,
 	}
 	body, err := json.Marshal(payload)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 
 	req, err := http.NewRequest("POST", strings.TrimSuffix(baseURL(), "/")+"/chat/completions", bytes.NewReader(body))
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	client := &http.Client{Timeout: time.Duration(timeoutSeconds()) * time.Second}
 	resp, err := client.Do(req)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
@@ -657,7 +788,9 @@ func callAPI(text, targetLang string) (string, error) {
 			} `json:"message"`
 		} `json:"choices"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil { return "", err }
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
 	if len(result.Choices) == 0 || strings.TrimSpace(result.Choices[0].Message.Content) == "" {
 		return "", errors.New("empty translation")
 	}
@@ -667,5 +800,8 @@ func callAPI(text, targetLang string) (string, error) {
 const MAX_TOKENS = 8192
 
 func fatal(err error) {
-	if err != nil { fmt.Fprintln(os.Stderr, "FATAL:", err); os.Exit(1) }
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "FATAL:", err)
+		os.Exit(1)
+	}
 }
