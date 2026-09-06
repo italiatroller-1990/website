@@ -729,11 +729,11 @@ def fix_relative_paths(md: str, source_rel: Path) -> str:
 # PRE-VALIDATION
 # ============================================================
 
-def pre_validate_pages(pages: list[Path]) -> dict[str, list[str]]:
+def pre_validate_pages(pages: list[Path], docs_dir: Path) -> dict[str, list[str]]:
     """Validate all pages before translation."""
     issues = {}
     for md_path in pages:
-        rel = str(md_path.relative_to(DOCS_DIR))
+        rel = str(md_path.relative_to(docs_dir))
         rel_issues = []
 
         md = md_path.read_text(encoding="utf-8")
@@ -916,7 +916,7 @@ def main():
 
     # Pre-validate
     if not args.dry_run:
-        validation_issues = pre_validate_pages(pages)
+        validation_issues = pre_validate_pages(pages, docs)
         if validation_issues:
             print("VALIDATION ERRORS:")
             for rel, errs in validation_issues.items():
