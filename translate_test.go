@@ -52,3 +52,16 @@ func TestFindSourcePages(t *testing.T) {
 		t.Fatalf("expected 2 source pages, got %d: %#v", len(pages), pages)
 	}
 }
+
+func TestValidatePlaceholdersBeforeRestore(t *testing.T) {
+	original := "Before __PH_0__ after __PH_1__."
+	translated := "Avant __PH_0__ apres __PH_1__."
+	if errs := validatePlaceholders(original, translated); len(errs) != 0 {
+		t.Fatalf("expected placeholders to validate, got %v", errs)
+	}
+
+	missing := "Avant __PH_0__."
+	if errs := validatePlaceholders(original, missing); len(errs) == 0 {
+		t.Fatal("expected missing placeholder to fail validation")
+	}
+}

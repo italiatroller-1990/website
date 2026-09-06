@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	cacheVersion          = 8
+	cacheVersion          = 9
 	minTextLength         = 2
 	defaultTimeoutSeconds = 120
 	defaultMaxRetries     = 2
@@ -72,6 +72,11 @@ type pageTask struct {
 	MDPath string
 	Rel    string
 	Hash   string
+}
+
+type translationResult struct {
+	Text     string
+	Fallback bool
 }
 
 type stats struct {
@@ -217,7 +222,7 @@ Options:
 		if !cfg.DryRun && len(tasks) > 0 {
 			for _, task := range tasks {
 				t0 := time.Now()
-				translated, err := translateOnePage(task.MDPath, lang, cache, stats, cfg.Strict)
+				result, err := translateOnePage(task.MDPath, lang, cache, stats, cfg.Strict)
 				if err != nil {
 					fmt.Printf("      ERROR: %v\n", err)
 					if cfg.Strict {
@@ -225,7 +230,7 @@ Options:
 					}
 					continue
 				}
-				fixed := fixRelativePaths(translated, task.Rel)
+				fixed := fixRelativePaths(result.Text, task.Rel)
 				outPath := filepath.Join(docsDir, lang, task.Rel)
 				if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 					fatal(err)
@@ -233,8 +238,12 @@ Options:
 				if err := os.WriteFile(outPath, []byte(fixed), 0o644); err != nil {
 					fatal(err)
 				}
-				pageMarkDone(state, task.Rel, task.Hash, lang)
-				fmt.Printf("  %-50s DONE (%ss)\n", task.Rel, strconv.FormatFloat(time.Since(t0).Seconds(), 'f', 1, 64))
+				if result.Fallback {
+					fmt.Printf("  %-50s FALLBACK (%ss)\n", task.Rel, strconv.FormatFloat(time.Since(t0).Seconds(), 'f', 1, 64))
+				} else {
+					pageMarkDone(state, task.Rel, task.Hash, lang)
+					fmt.Printf("  %-50s DONE (%ss)\n", task.Rel, strconv.FormatFloat(time.Since(t0).Seconds(), 'f', 1, 64))
+				}
 			}
 			saveCache(filepath.Join(docsDir, ".vitepress", "translation-cache.json"), cache)
 			saveState(filepath.Join(docsDir, ".vitepress", "translation-state.json"), state)
@@ -576,16 +585,16 @@ func postProcess(text, targetLang string) string {
 	return strings.ReplaceAll(text, "] (", "](")
 }
 
-func translateOnePage(mdPath, lang string, cache map[string]cacheEntry, stats *stats, strict bool) (string, error) {
+func translateOnePage(mdPath, lang string, cache map[string]cacheEntry, stats *stats, strict bool) (translationResult, error) {
 	md, err := os.ReadFile(mdPath)
 	if err != nil {
-		return "", err
+		return translationResult{}, err
 	}
 	text := string(md)
 	fmText, body := extractFrontmatter(text)
 	protectedBody, items := protect(body)
 	if proseLength(protectedBody) < minTextLength {
-		return text, nil
+		return translationResult{Text: text}, nil
 	}
 
 	translatedBody, ok := cacheGet(cache, protectedBody, lang)
@@ -595,36 +604,37 @@ func translateOnePage(mdPath, lang string, cache map[string]cacheEntry, stats *s
 		stats.CacheMisses++
 		tr, err := callAPI(protectedBody, lang)
 		if err != nil {
-			return "", err
+			return translationResult{}, err
 		}
 		translatedBody = postProcess(tr, lang)
-		cachePut(cache, protectedBody, lang, translatedBody)
 		stats.APIRequests++
 	}
 
-	restoredBody := restore(translatedBody, items)
-	errs := validatePlaceholders(protectedBody, restoredBody)
+	errs := validatePlaceholders(protectedBody, translatedBody)
 	if len(errs) > 0 {
+		delete(cache, cacheKey(protectedBody, lang))
 		for _, err := range errs {
 			fmt.Printf("      VALIDATION: %s\n", err)
 		}
 		if strict {
-			return "", errors.New(errs[0])
+			return translationResult{}, errors.New(errs[0])
 		}
 		if fmText != "" {
-			return fmText + restore(protectedBody, items), nil
+			return translationResult{Text: fmText + restore(protectedBody, items), Fallback: true}, nil
 		}
-		return restore(protectedBody, items), nil
+		return translationResult{Text: restore(protectedBody, items), Fallback: true}, nil
 	}
+	cachePut(cache, protectedBody, lang, translatedBody)
+	restoredBody := restore(translatedBody, items)
 
 	if fmText != "" {
 		translatedFM, err := translateFrontmatter(fmText, lang, cache, stats)
 		if err != nil {
-			return "", err
+			return translationResult{}, err
 		}
-		return translatedFM + restoredBody, nil
+		return translationResult{Text: translatedFM + restoredBody}, nil
 	}
-	return restoredBody, nil
+	return translationResult{Text: restoredBody}, nil
 }
 
 func fixRelativePaths(md, sourceRel string) string {
