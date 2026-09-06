@@ -4,7 +4,7 @@
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:translate": "go run translate.go",
-    "docs:build:all": "npm run docs:translate && npm run docs:build",
+    "docs:build:all": "TRANSLATION_TIMEOUT=30 TRANSLATION_MAX_RETRIES=0 npm run docs:translate && npm run docs:build",
     "docs:preview": "vitepress preview docs"
   },
   "devDependencies": {

@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -29,6 +30,7 @@ const (
 )
 
 var languages = map[string]string{"vi": "Vietnamese", "fr": "French", "ja": "Japanese"}
+var cacheMu sync.Mutex
 var translatableFMKeys = map[string]struct{}{
 	"title": {}, "description": {}, "details": {}, "name": {}, "tagline": {},
 	"label": {}, "text": {}, "placeholder": {}, "hero": {},
@@ -80,9 +82,28 @@ type translationResult struct {
 }
 
 type stats struct {
+	mu          sync.Mutex
 	CacheHits   int
 	CacheMisses int
 	APIRequests int
+}
+
+func (s *stats) addCacheHit() {
+	s.mu.Lock()
+	s.CacheHits++
+	s.mu.Unlock()
+}
+
+func (s *stats) addCacheMiss() {
+	s.mu.Lock()
+	s.CacheMisses++
+	s.mu.Unlock()
+}
+
+func (s *stats) addAPIRequest() {
+	s.mu.Lock()
+	s.APIRequests++
+	s.mu.Unlock()
 }
 
 func main() {
@@ -220,17 +241,18 @@ Options:
 		fmt.Printf("  pages changed: %d\n", pagesTranslated)
 
 		if !cfg.DryRun && len(tasks) > 0 {
-			for _, task := range tasks {
+			results := translateTasks(tasks, lang, cache, stats, cfg)
+			for _, result := range results {
+				task := result.Task
 				t0 := time.Now()
-				result, err := translateOnePage(task.MDPath, lang, cache, stats, cfg.Strict)
-				if err != nil {
-					fmt.Printf("      ERROR: %v\n", err)
+				if result.Err != nil {
+					fmt.Printf("      ERROR: %v\n", result.Err)
 					if cfg.Strict {
 						os.Exit(1)
 					}
 					continue
 				}
-				fixed := fixRelativePaths(result.Text, task.Rel)
+				fixed := fixRelativePaths(result.Translation.Text, task.Rel)
 				outPath := filepath.Join(docsDir, lang, task.Rel)
 				if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 					fatal(err)
@@ -238,7 +260,7 @@ Options:
 				if err := os.WriteFile(outPath, []byte(fixed), 0o644); err != nil {
 					fatal(err)
 				}
-				if result.Fallback {
+				if result.Translation.Fallback {
 					fmt.Printf("  %-50s FALLBACK (%ss)\n", task.Rel, strconv.FormatFloat(time.Since(t0).Seconds(), 'f', 1, 64))
 				} else {
 					pageMarkDone(state, task.Rel, task.Hash, lang)
@@ -265,6 +287,42 @@ Options:
 		fmt.Println("Mode:   STRICT (errors cause exit)")
 	}
 	fmt.Println()
+}
+
+type taskResult struct {
+	Task        pageTask
+	Translation translationResult
+	Err         error
+}
+
+func translateTasks(tasks []pageTask, lang string, cache map[string]cacheEntry, stats *stats, cfg options) []taskResult {
+	results := make([]taskResult, len(tasks))
+	workers := cfg.Workers
+	if workers < 1 {
+		workers = 1
+	}
+	if workers > len(tasks) {
+		workers = len(tasks)
+	}
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for index := range jobs {
+				task := tasks[index]
+				translation, err := translateOnePage(task.MDPath, lang, cache, stats, cfg.Strict)
+				results[index] = taskResult{Task: task, Translation: translation, Err: err}
+			}
+		}()
+	}
+	for index := range tasks {
+		jobs <- index
+	}
+	close(jobs)
+	wg.Wait()
+	return results
 }
 
 func parseArgs() options {
@@ -522,7 +580,7 @@ func translateFrontmatter(fm string, targetLang string, cache map[string]cacheEn
 
 		translated, ok := cacheGet(cache, value, targetLang)
 		if ok {
-			stats.CacheHits++
+			stats.addCacheHit()
 		} else {
 			tr, err := callAPI(value, targetLang)
 			if err != nil {
@@ -530,8 +588,8 @@ func translateFrontmatter(fm string, targetLang string, cache map[string]cacheEn
 			}
 			translated = postProcess(tr, targetLang)
 			cachePut(cache, value, targetLang, translated)
-			stats.CacheMisses++
-			stats.APIRequests++
+			stats.addCacheMiss()
+			stats.addAPIRequest()
 		}
 
 		q := quote
@@ -566,6 +624,8 @@ func sha256Hex(s string) string {
 }
 
 func cacheGet(cache map[string]cacheEntry, text, target string) (string, bool) {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
 	entry, ok := cache[cacheKey(text, target)]
 	if !ok || entry.R == "" {
 		return "", false
@@ -574,7 +634,15 @@ func cacheGet(cache map[string]cacheEntry, text, target string) (string, bool) {
 }
 
 func cachePut(cache map[string]cacheEntry, text, target, translation string) {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
 	cache[cacheKey(text, target)] = cacheEntry{R: translation, TS: time.Now().Unix()}
+}
+
+func cacheDelete(cache map[string]cacheEntry, text, target string) {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	delete(cache, cacheKey(text, target))
 }
 
 func postProcess(text, targetLang string) string {
@@ -599,20 +667,23 @@ func translateOnePage(mdPath, lang string, cache map[string]cacheEntry, stats *s
 
 	translatedBody, ok := cacheGet(cache, protectedBody, lang)
 	if ok {
-		stats.CacheHits++
+		stats.addCacheHit()
 	} else {
-		stats.CacheMisses++
+		stats.addCacheMiss()
 		tr, err := callAPI(protectedBody, lang)
 		if err != nil {
+			if !strict {
+				return translationResult{Text: text, Fallback: true}, nil
+			}
 			return translationResult{}, err
 		}
 		translatedBody = postProcess(tr, lang)
-		stats.APIRequests++
+		stats.addAPIRequest()
 	}
 
 	errs := validatePlaceholders(protectedBody, translatedBody)
 	if len(errs) > 0 {
-		delete(cache, cacheKey(protectedBody, lang))
+		cacheDelete(cache, protectedBody, lang)
 		for _, err := range errs {
 			fmt.Printf("      VALIDATION: %s\n", err)
 		}
@@ -630,6 +701,9 @@ func translateOnePage(mdPath, lang string, cache map[string]cacheEntry, stats *s
 	if fmText != "" {
 		translatedFM, err := translateFrontmatter(fmText, lang, cache, stats)
 		if err != nil {
+			if !strict {
+				return translationResult{Text: text, Fallback: true}, nil
+			}
 			return translationResult{}, err
 		}
 		return translationResult{Text: translatedFM + restoredBody}, nil
