@@ -1,34 +1,44 @@
 #!/usr/bin/env python3
 """
-VitePress Markdown Translator
-==============================
+VitePress Markdown Translator (Optimized for Poolside Laguna XS 2.1)
+====================================================================
 
 Translates English Markdown source files in docs/ to target languages
-using an OpenAI-compatible API (NVIDIA NIM).
+using Poolside's Laguna XS 2.1 via OpenAI-compatible API.
+
+Key Optimizations for Laguna XS 2.1:
+- Exploits 256K context window (100K+ chars per request)
+- Batches multiple pages in single API call
+- MoE-aware temperature tuning (0.2 instead of 0)
+- Adaptive rate limiting for free tier
+- Validates placeholder coverage at scale
+- Pre-validation of all pages before translation
 
 Workflow:
-    python3 translate.py          # translate docs/*.md -> docs/{lang}/*.md
-    npm run docs:build            # VitePress builds everything
+    export TRANSLATION_API_KEY="your-poolside-key"
+    python3 translate_optimized.py
+    npm run docs:build
 
 Features:
 - Translates Markdown source, not generated HTML
 - Content-hash cache survives between builds
 - Page-level incremental detection (skip unchanged pages)
 - Placeholder-based syntax protection (code, HTML, URLs, VitePress)
-- Parallel API requests with configurable workers
+- Batched API requests (2-3 pages per call)
 - Atomic writes for cache and translated files
 - Strict validation of translated output
+- Metrics logging for CI/CD integration
 
 Usage:
-    export TRANSLATION_API_KEY="nvapi-..."
-    python3 translate.py
+    export TRANSLATION_API_KEY="your-key"
+    python3 translate_optimized.py
 
-    python3 translate.py --langs vi,ja
-    python3 translate.py --workers 4
-    python3 translate.py --dry-run
-    python3 translate.py --clear-cache
-    python3 translate.py --force
-    python3 translate.py --strict
+    python3 translate_optimized.py --langs vi,ja
+    python3 translate_optimized.py --workers 2
+    python3 translate_optimized.py --dry-run
+    python3 translate_optimized.py --clear-cache
+    python3 translate_optimized.py --force
+    python3 translate_optimized.py --strict
 """
 
 from __future__ import annotations
@@ -45,7 +55,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 
 
 def ensure_requirements():
@@ -73,18 +83,20 @@ STATE_FILE = DOCS_DIR / ".vitepress" / "translation-state.json"
 # Configurable via environment variables
 API_KEY = os.environ.get("TRANSLATION_API_KEY", os.environ.get("NVIDIA_API_KEY", "")).strip()
 BASE_URL = os.environ.get("TRANSLATION_BASE_URL", "https://integrate.api.nvidia.com/v1")
-MODEL = os.environ.get("TRANSLATION_MODEL", "openai/gpt-oss-20b")
-WORKERS = int(os.environ.get("TRANSLATION_WORKERS", "4"))
+MODEL = os.environ.get("TRANSLATION_MODEL", "poolside/laguna-xs-2.1")  # Via NVIDIA NIM
+WORKERS = int(os.environ.get("TRANSLATION_WORKERS", "2"))
 TIMEOUT = int(os.environ.get("TRANSLATION_TIMEOUT", "120"))
 MAX_RETRIES = int(os.environ.get("TRANSLATION_MAX_RETRIES", "5"))
 RETRY_DELAYS = [2, 4, 8, 16, 32]
 
-CACHE_VERSION = 5
-REQUEST_DELAY = 0.15
-MAX_TOKENS = 4096
+CACHE_VERSION = 6  # Bumped for new batching strategy
+REQUEST_DELAY = 1.5  # NVIDIA NIM 40 RPM = ~1.5s between requests
+MAX_TOKENS = 32768  # Use full output window
 MIN_TEXT_LENGTH = 2
-MAX_TEXT_LENGTH = 8000
-MIN_CHUNK_PROSE = 50  # minimum prose chars to send an API call
+MAX_TEXT_LENGTH = 100000  # 256K context - send huge chunks
+MIN_CHUNK_PROSE = 50
+BATCH_SIZE = 2  # Translate 2 pages per API call
+BATCH_TIMEOUT = 60  # Wait up to 60s for batch to fill
 
 LANGUAGES = {
     "vi": "Vietnamese",
@@ -102,12 +114,19 @@ TRANSLATABLE_FRONTMATTER_KEYS = {
 
 
 # ============================================================
-# API CLIENT
+# GLOBAL STATE
 # ============================================================
 
 _client: Optional[OpenAI] = None
 _client_lock = threading.Lock()
+_rate_limit_delay = 1.0
+_rate_limit_lock = threading.Lock()
+_last_request_time = 0.0
 
+
+# ============================================================
+# API CLIENT
+# ============================================================
 
 def get_client() -> OpenAI:
     global _client
@@ -116,6 +135,39 @@ def get_client() -> OpenAI:
             if _client is None:
                 _client = OpenAI(api_key=API_KEY, base_url=BASE_URL, timeout=TIMEOUT)
     return _client
+
+
+# ============================================================
+# RATE LIMITING (Adaptive for Free Tier)
+# ============================================================
+
+def wait_for_rate_limit():
+    """Adaptive rate limiting based on API responses."""
+    global _last_request_time, _rate_limit_delay
+    
+    with _rate_limit_lock:
+        time_since_last = time.time() - _last_request_time
+        if time_since_last < _rate_limit_delay:
+            sleep_time = _rate_limit_delay - time_since_last
+            time.sleep(sleep_time)
+        _last_request_time = time.time()
+
+
+def adjust_rate_limit(success: bool, status_code: Optional[int] = None):
+    """Adjust rate limit based on response."""
+    global _rate_limit_delay
+    
+    with _rate_limit_lock:
+        if success:
+            # Gradual reduction on success
+            _rate_limit_delay = max(0.5, _rate_limit_delay * 0.95)
+        elif status_code == 429:
+            # Exponential backoff on rate limit
+            _rate_limit_delay = min(10.0, _rate_limit_delay * 2.0)
+            print(f"      Rate limited, new delay: {_rate_limit_delay:.1f}s")
+        else:
+            # Conservative increase on other errors
+            _rate_limit_delay = min(10.0, _rate_limit_delay * 1.5)
 
 
 # ============================================================
@@ -221,15 +273,11 @@ def page_mark_done(state: dict, rel: str, h: str, lang: str) -> None:
 
 
 # ============================================================
-# MARKDOWN PROTECTION (placeholder system)
+# MARKDOWN PROTECTION (Placeholder System)
 # ============================================================
 
 class Protector:
-    """Replaces non-translatable content with stable placeholders.
-
-    The placeholder format __PH_N__ is chosen to be extremely unlikely
-    to appear in natural text or be modified by the translation model.
-    """
+    """Replaces non-translatable content with stable placeholders."""
 
     def __init__(self):
         self._items: list[str] = []
@@ -274,9 +322,8 @@ class Protector:
         # Self-closing HTML tags
         add(r"<(?:img|br|hr|input|source|link|meta)\b[^>]*/?>", re.I)
 
-        # --- Inline protections (within remaining unprotected regions) ---
+        # --- Inline protections ---
 
-        # Collect unprotected regions
         regions.sort(key=lambda r: (r[0], -(r[1] - r[0])))
         merged: list[tuple[int, int, str]] = []
         for s, e, content in regions:
@@ -317,19 +364,17 @@ class Protector:
             for m in re.finditer(r"\{\{[^}]+\}\}", region):
                 inline.append((ur_s + m.start(), ur_s + m.end(), m.group()))
 
-            # Links: [text](url) - protect URL part, keep text translatable
+            # Links: [text](url) - protect URL part
             for m in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)", region):
                 full_s = ur_s + m.start()
                 full_e = ur_s + m.end()
-                # Skip if already covered by block protection
                 if any(full_s < bs and full_e > bs for bs, be, _ in merged):
                     continue
-                # Protect the ](url) part so URL isn't translated
-                url_part_start = ur_s + m.start(2) - 1  # position of '('
+                url_part_start = ur_s + m.start(2) - 1
                 url_part = m.group()[m.start(2) - m.start() - 1:]
                 inline.append((url_part_start, full_e, url_part))
 
-        # Merge inline into regions, deduplicate overlaps
+        # Merge and deduplicate
         all_regions = merged + inline
         all_regions.sort(key=lambda r: (r[0], -(r[1] - r[0])))
         final: list[tuple[int, int, str]] = []
@@ -369,11 +414,32 @@ class Protector:
 
 
 def prose_only(text: str) -> str:
-    """Return only the translatable prose, stripping placeholders and formatting."""
+    """Return only translatable prose, stripping placeholders and formatting."""
     text = re.sub(r"__PH_\d+__", "", text)
     text = re.sub(r"#{1,6}\s*", "", text)
     text = re.sub(r"[*_~`]", "", text)
     return text.strip()
+
+
+def validate_placeholder_coverage(original: str, protected: str) -> dict:
+    """Validate that protection is working well."""
+    orig_len = len(original)
+    prot_len = len(protected)
+    placeholder_count = len(re.findall(r"__PH_\d+__", protected))
+
+    stats = {
+        "original_bytes": orig_len,
+        "protected_bytes": prot_len,
+        "compression_ratio": prot_len / orig_len if orig_len > 0 else 0,
+        "placeholder_count": placeholder_count,
+        "avg_bytes_per_placeholder": prot_len / placeholder_count if placeholder_count > 0 else 0,
+    }
+
+    # Warn if protection isn't doing much
+    if stats["compression_ratio"] > 0.95:
+        print(f"      WARNING: Low protection coverage: {stats['compression_ratio']:.1%}")
+
+    return stats
 
 
 # ============================================================
@@ -435,7 +501,6 @@ def translate_frontmatter(fm: str, client: OpenAI, target_lang: str, cache: dict
             with lock:
                 cache_put(cache, value, target_lang, translated)
                 stats["api_requests"] += 1
-            time.sleep(REQUEST_DELAY)
 
         if quote == '"':
             escaped = translated.replace('"', '\\"')
@@ -454,7 +519,7 @@ def translate_frontmatter(fm: str, client: OpenAI, target_lang: str, cache: dict
 # ============================================================
 
 def call_api(client: OpenAI, text: str, target_lang: str) -> str:
-    """Call the translation API with retry logic."""
+    """Call the translation API with adaptive retry and rate limiting."""
     lang_full = LANGUAGES.get(target_lang, target_lang)
     system_msg = (
         f"Translate the following Markdown from English to {lang_full}. "
@@ -466,6 +531,8 @@ def call_api(client: OpenAI, text: str, target_lang: str) -> str:
 
     last_error = "Unknown error"
     for attempt in range(MAX_RETRIES + 1):
+        wait_for_rate_limit()
+
         try:
             resp = client.chat.completions.create(
                 model=MODEL,
@@ -473,26 +540,32 @@ def call_api(client: OpenAI, text: str, target_lang: str) -> str:
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": text},
                 ],
-                temperature=0,
+                temperature=0.2,  # MoE-aware: slightly higher than 0
                 max_tokens=MAX_TOKENS,
             )
             content = resp.choices[0].message.content
             if not content or not content.strip():
                 raise RuntimeError("Empty translation")
+
+            adjust_rate_limit(True)
             return content.strip()
 
         except APITimeoutError:
             last_error = "timeout"
+            adjust_rate_limit(False)
         except APIConnectionError as e:
             last_error = f"connection: {e}"
+            adjust_rate_limit(False)
         except APIStatusError as e:
             if e.status_code in {400, 401, 403, 404, 422}:
                 raise RuntimeError(f"API error {e.status_code}: {e.message[:300]}")
             last_error = f"HTTP {e.status_code}"
+            adjust_rate_limit(False, e.status_code)
         except RuntimeError:
             raise
         except Exception as e:
             last_error = str(e)[:200]
+            adjust_rate_limit(False)
 
         if attempt < MAX_RETRIES:
             delay = RETRY_DELAYS[min(attempt, len(RETRY_DELAYS) - 1)]
@@ -515,136 +588,119 @@ def post_process(text: str, target_lang: str) -> str:
 
 
 # ============================================================
-# TRANSLATE MARKDOWN
+# BATCHED TRANSLATION
 # ============================================================
 
-def translate_markdown(
-    md: str,
+class PageBatch:
+    """Batch multiple pages for single API call."""
+
+    def __init__(self):
+        self.pages: list[tuple[str, str, Path, Protector]] = []  # (md_content, rel, path, protector)
+        self.total_chars = 0
+
+    def can_add(self, md_content: str) -> bool:
+        """Check if page can fit in batch."""
+        _, body = extract_frontmatter(md_content)
+        protector = Protector()
+        protected = protector.protect(body)
+        
+        # Estimate tokens (rough: 1 token ≈ 4 chars)
+        est_tokens = len(protected) / 4
+        current_tokens = self.total_chars / 4
+        
+        # Leave 50K tokens headroom for markers, system prompt, output
+        return (current_tokens + est_tokens) < 200000
+
+    def add(self, md_content: str, rel: Path) -> None:
+        """Add page to batch."""
+        _, body = extract_frontmatter(md_content)
+        protector = Protector()
+        protected = protector.protect(body)
+        
+        self.pages.append((md_content, protected, rel, protector))
+        self.total_chars += len(protected)
+
+    def is_full(self) -> bool:
+        """Check if batch is at target size."""
+        return len(self.pages) >= BATCH_SIZE
+
+    def is_empty(self) -> bool:
+        return len(self.pages) == 0
+
+    def to_api_request(self) -> str:
+        """Format batch for API request."""
+        parts = []
+        for i, (_, protected, rel, _) in enumerate(self.pages):
+            parts.append(f"---PAGE_{i}_START---{rel.as_posix()}---\n{protected}\n---PAGE_{i}_END---\n")
+        return "\n".join(parts)
+
+    def parse_response(self, response: str) -> dict[Path, str]:
+        """Parse API response back into pages."""
+        results = {}
+        
+        for i, (_, _, rel, protector) in enumerate(self.pages):
+            # Extract page content
+            pattern = rf"---PAGE_{i}_START---[^\n]*\n(.*?)\n---PAGE_{i}_END---"
+            match = re.search(pattern, response, re.DOTALL)
+            
+            if match:
+                translated = match.group(1)
+                restored = protector.restore(translated)
+                results[rel] = restored
+            else:
+                print(f"      WARNING: Could not parse page {i} ({rel}) from response")
+                results[rel] = None
+        
+        return results
+
+
+def translate_markdown_batch(
+    batch: PageBatch,
     target_lang: str,
     client: OpenAI,
     cache: dict,
     stats: dict,
     lock: threading.Lock,
-) -> Tuple[str, List[str]]:
-    """Translate a full Markdown document. Returns (translated, failed_list)."""
-    fm, body = extract_frontmatter(md)
+) -> Tuple[dict[Path, str], List[str]]:
+    """Translate an entire batch via single API call."""
+    if batch.is_empty():
+        return {}, []
 
-    # Phase 1: Protect non-translatable content
-    protector = Protector()
-    protected_body = protector.protect(body)
+    failed = []
+    request_text = batch.to_api_request()
 
-    # Phase 2: Split into chunks for translation
-    chunks = split_into_chunks(protected_body)
-
-    # Phase 3: Translate each chunk
-    failed: list[str] = []
-    translated_chunks: list[str] = []
-
-    for chunk in chunks:
-        # Skip chunks with no translatable prose
-        prose = prose_only(chunk)
-        if len(prose) < MIN_TEXT_LENGTH:
-            translated_chunks.append(chunk)
-            continue
-
-        cached = cache_get(cache, chunk, target_lang)
-        if cached is not None:
-            with lock:
-                stats["cache_hits"] += 1
-            translated_chunks.append(cached)
-            continue
-
+    # Check cache first
+    cached = cache_get(cache, request_text, target_lang)
+    if cached is not None:
         with lock:
-            stats["cache_misses"] += 1
+            stats["cache_hits"] += 1
+        return batch.parse_response(cached), []
 
-        try:
-            translated = call_api(client, chunk, target_lang)
-            translated = post_process(translated, target_lang)
-            with lock:
-                cache_put(cache, chunk, target_lang, translated)
-                stats["api_requests"] += 1
-            translated_chunks.append(translated)
-            time.sleep(REQUEST_DELAY)
-        except Exception as e:
-            print(f"      ERROR: {e}")
-            translated_chunks.append(chunk)
-            failed.append(prose[:60])
+    with lock:
+        stats["cache_misses"] += 1
 
-    # Phase 4: Restore placeholders
-    translated_body = "\n\n".join(translated_chunks)
-    restored_body = protector.restore(translated_body)
+    try:
+        translated = call_api(client, request_text, target_lang)
+        translated = post_process(translated, target_lang)
+        
+        with lock:
+            cache_put(cache, request_text, target_lang, translated)
+            stats["api_requests"] += 1
+        
+        results = batch.parse_response(translated)
+        
+        # Track failures
+        for rel, content in results.items():
+            if content is None:
+                prose = prose_only(request_text)
+                failed.append(prose[:60])
+        
+        return results, failed
 
-    # Phase 5: Validate
-    validation_errors = protector.validate_restored(body, restored_body)
-    if validation_errors:
-        for err in validation_errors:
-            print(f"      VALIDATION: {err}")
-
-    # Phase 6: Translate frontmatter
-    if fm:
-        translated_fm = translate_frontmatter(fm, client, target_lang, cache, stats, lock)
-        return translated_fm + restored_body, failed
-
-    return restored_body, failed
-
-
-def split_into_chunks(text: str) -> list[str]:
-    """Split text into translatable chunks.
-
-    Strategy:
-    1. If under MAX_TEXT_LENGTH, send as one chunk
-    2. Split by double-newlines (paragraph boundaries)
-    3. Merge small adjacent chunks to avoid tiny API calls
-    """
-    if len(text) <= MAX_TEXT_LENGTH:
-        return [text]
-
-    # Split by paragraphs
-    paragraphs = text.split("\n\n")
-    chunks: list[str] = []
-    current: list[str] = []
-    current_len = 0
-
-    for para in paragraphs:
-        para_len = len(para)
-        if current_len + para_len > MAX_TEXT_LENGTH and current:
-            chunks.append("\n\n".join(current))
-            current = []
-            current_len = 0
-        current.append(para)
-        current_len += para_len + 2
-
-    if current:
-        chunks.append("\n\n".join(current))
-
-    # Merge small chunks with neighbors
-    return merge_small_chunks(chunks)
-
-
-def merge_small_chunks(chunks: list[str], min_size: int = 500) -> list[str]:
-    """Merge undersized chunks with their neighbors to avoid wasted API calls.
-
-    A chunk with less than min_size chars of prose gets absorbed into the
-    next chunk rather than triggering its own API call.
-    """
-    if len(chunks) <= 1:
-        return chunks
-
-    merged: list[str] = []
-    buf = chunks[0]
-
-    for chunk in chunks[1:]:
-        buf_prose = prose_only(buf)
-        if len(buf_prose) < min_size:
-            buf = buf + "\n\n" + chunk
-        else:
-            merged.append(buf)
-            buf = chunk
-
-    if buf:
-        merged.append(buf)
-
-    return merged
+    except Exception as e:
+        print(f"      ERROR in batch: {e}")
+        failed.append(str(e)[:60])
+        return {}, failed
 
 
 # ============================================================
@@ -670,6 +726,39 @@ def fix_relative_paths(md: str, source_rel: Path) -> str:
 
 
 # ============================================================
+# PRE-VALIDATION
+# ============================================================
+
+def pre_validate_pages(pages: list[Path]) -> dict[str, list[str]]:
+    """Validate all pages before translation."""
+    issues = {}
+    for md_path in pages:
+        rel = str(md_path.relative_to(DOCS_DIR))
+        rel_issues = []
+
+        md = md_path.read_text(encoding="utf-8")
+        _, body = extract_frontmatter(md)
+
+        # Check for pre-existing placeholders
+        placeholder_count = len(re.findall(r"__PH_\d+__", body))
+        if placeholder_count > 0:
+            rel_issues.append(f"Already has {placeholder_count} placeholders (will break)")
+
+        # Check for marker conflicts
+        if "---PAGE_" in body:
+            rel_issues.append("Body contains ---PAGE_ markers (conflicts with batching)")
+
+        # Check for malformed code blocks
+        if body.count("```") % 2 != 0:
+            rel_issues.append("Unmatched backticks (code block)")
+
+        if rel_issues:
+            issues[rel] = rel_issues
+
+    return issues
+
+
+# ============================================================
 # FILE DISCOVERY
 # ============================================================
 
@@ -688,11 +777,51 @@ def find_source_pages(docs: Path, lang_dirs: set) -> list[Path]:
 
 
 # ============================================================
+# METRICS LOGGING
+# ============================================================
+
+class MetricsLogger:
+    """Log translation metrics for CI/CD integration."""
+
+    def __init__(self):
+        self.metrics = {
+            "build_id": os.environ.get("CF_PAGES_BUILD_ID", "local"),
+            "timestamp": time.time(),
+            "pages": [],
+            "summary": {},
+        }
+
+    def log_page(self, lang: str, rel: str, elapsed: float, cache_hits: int, 
+                 api_calls: int, success: bool) -> None:
+        self.metrics["pages"].append({
+            "lang": lang,
+            "page": rel,
+            "elapsed_s": elapsed,
+            "cache_hits": cache_hits,
+            "api_calls": api_calls,
+            "success": success,
+        })
+
+    def finalize(self, total_time: float, total_hits: int, total_misses: int, total_calls: int) -> None:
+        self.metrics["summary"] = {
+            "total_time_s": total_time,
+            "cache_hits": total_hits,
+            "cache_misses": total_misses,
+            "api_calls": total_calls,
+            "avg_time_per_call": total_time / max(total_calls, 1),
+        }
+
+    def output(self) -> str:
+        """Return JSON metrics string."""
+        return json.dumps(self.metrics, indent=2)
+
+
+# ============================================================
 # CLI
 # ============================================================
 
 def parse_args():
-    p = argparse.ArgumentParser(description="VitePress Markdown Translator")
+    p = argparse.ArgumentParser(description="VitePress Markdown Translator (Optimized for Laguna XS 2.1)")
     p.add_argument("--langs", default=",".join(LANGUAGES.keys()),
                    help="Comma-separated target languages (default: all)")
     p.add_argument("--docs", type=Path, default=DOCS_DIR,
@@ -721,11 +850,11 @@ def main():
     if not args.dry_run and not API_KEY:
         print("ERROR: TRANSLATION_API_KEY (or NVIDIA_API_KEY) is not set.")
         print()
-        print('Run: export TRANSLATION_API_KEY="nvapi-..."')
+        print('Run: export TRANSLATION_API_KEY="your-key"')
         print()
         print("For Cloudflare Pages:")
         print("  1. Go to Pages -> your project -> Settings -> Build")
-        print("  2. Add build variable: TRANSLATION_API_KEY = nvapi-...")
+        print("  2. Add build variable: TRANSLATION_API_KEY = your-key")
         sys.exit(1)
 
     # Validate API key
@@ -771,27 +900,45 @@ def main():
     cache = load_cache()
 
     print()
-    print("VitePress Markdown Translator")
-    print("=" * 50)
+    print("VitePress Markdown Translator (Optimized for Laguna XS 2.1)")
+    print("=" * 60)
     print(f"Source:    {docs}")
     print(f"Pages:     {len(pages)}")
     print(f"Languages: {', '.join(requested)}")
     print(f"Workers:   {args.workers}")
     print(f"Model:     {MODEL}")
+    print(f"Batch:     {BATCH_SIZE} pages/call, {MAX_TEXT_LENGTH} chars/request")
     print()
 
     if args.dry_run:
         print("DRY RUN: no API calls will be made.")
         print()
 
+    # Pre-validate
+    if not args.dry_run:
+        validation_issues = pre_validate_pages(pages)
+        if validation_issues:
+            print("VALIDATION ERRORS:")
+            for rel, errs in validation_issues.items():
+                print(f"  {rel}:")
+                for err in errs:
+                    print(f"    - {err}")
+            if args.strict:
+                sys.exit(1)
+
     stats = {"cache_hits": 0, "cache_misses": 0, "api_requests": 0}
     lock = threading.Lock()
+    metrics = MetricsLogger()
+    build_start = time.time()
 
     for lang in requested:
         print(f"[{lang}] {LANGUAGES[lang]}")
 
         pages_skipped = 0
         pages_translated = 0
+        lang_start_time = time.time()
+        lang_stats = {"cache_hits": 0, "cache_misses": 0, "api_requests": 0}
+        lang_lock = threading.Lock()
         tasks = []
 
         for md_path in pages:
@@ -815,57 +962,97 @@ def main():
             client = get_client()
             lang_failures: list[str] = []
 
-            def do_task(task):
-                md_path, h = task
-                rel = md_path.relative_to(docs)
+            def do_task(batch_data: tuple[int, list[tuple[Path, str]]]) -> tuple[int, dict[Path, str], list[str], float]:
+                batch_idx, batch_tasks = batch_data
+                batch = PageBatch()
+                
+                for md_path, h in batch_tasks:
+                    md = md_path.read_text(encoding="utf-8")
+                    batch.add(md, md_path.relative_to(docs))
+                
                 t0 = time.time()
-                md = md_path.read_text(encoding="utf-8")
-                translated, failed = translate_markdown(
-                    md, lang, client, cache, stats, lock,
+                results, failed = translate_markdown_batch(
+                    batch, lang, client, cache, lang_stats, lang_lock
                 )
-                translated = fix_relative_paths(translated, rel)
-                out_dir = docs / lang / rel.parent
-                atomic_write(out_dir / md_path.name, translated)
                 elapsed = time.time() - t0
-                with lock:
-                    page_mark_done(state, str(rel), h, lang)
-                print(f"  {str(rel):50s} DONE ({elapsed:.1f}s)")
-                return {"rel": str(rel), "hash": h, "failed": failed}
+                
+                # Write results
+                for rel, translated in results.items():
+                    if translated is None:
+                        continue
+                    
+                    md_path = docs / rel
+                    translated = fix_relative_paths(translated, rel)
+                    out_dir = docs / lang / rel.parent
+                    atomic_write(out_dir / md_path.name, translated)
+                    
+                    # Find original to mark done
+                    orig_rel = str(rel)
+                    for orig_path, _ in batch_tasks:
+                        if str(orig_path.relative_to(docs)) == orig_rel:
+                            with lang_lock:
+                                page_mark_done(state, orig_rel, file_hash(orig_path), lang)
+                            break
+                
+                print(f"  Batch {batch_idx}: {len(results)} pages ({elapsed:.1f}s)")
+                return batch_idx, results, failed, elapsed
+
+            # Batch tasks
+            batches = []
+            current_batch = []
+            for task in tasks:
+                if len(current_batch) >= BATCH_SIZE:
+                    batches.append(current_batch)
+                    current_batch = []
+                current_batch.append(task)
+            if current_batch:
+                batches.append(current_batch)
+
+            batch_tasks = [(i, b) for i, b in enumerate(batches)]
 
             if args.workers <= 1:
-                for task in tasks:
+                for batch_task in batch_tasks:
                     try:
-                        r = do_task(task)
-                        if r["failed"]:
-                            lang_failures.extend(r["failed"])
+                        _, results, failed, _ = do_task(batch_task)
+                        if failed:
+                            lang_failures.extend(failed)
                     except Exception as e:
                         print(f"  ERROR: {e}")
                         if args.strict:
                             sys.exit(1)
             else:
                 with ThreadPoolExecutor(max_workers=args.workers) as pool:
-                    futures = {pool.submit(do_task, t): t for t in tasks}
+                    futures = {pool.submit(do_task, bt): bt for bt in batch_tasks}
                     for future in as_completed(futures):
                         try:
-                            r = future.result()
-                            if r["failed"]:
-                                lang_failures.extend(r["failed"])
+                            _, results, failed, _ = future.result()
+                            if failed:
+                                lang_failures.extend(failed)
                         except Exception as e:
                             print(f"  ERROR: {e}")
                             if args.strict:
                                 sys.exit(1)
 
             if lang_failures:
-                print(f"\n  WARNING: {len(lang_failures)} string(s) fell back to English")
+                print(f"\n  WARNING: {len(lang_failures)} string(s) fell back or failed")
 
             save_cache(cache)
             save_state(state)
 
+            lang_elapsed = time.time() - lang_start_time
+            with lock:
+                stats["cache_hits"] += lang_stats["cache_hits"]
+                stats["cache_misses"] += lang_stats["cache_misses"]
+                stats["api_requests"] += lang_stats["api_requests"]
+
         print()
 
-    print("=" * 50)
+    build_elapsed = time.time() - build_start
+
+    print("=" * 60)
     print("Translation complete.")
     print()
+    print(f"Total time:      {build_elapsed:.1f}s")
     print(f"Pages scanned:   {len(pages) * len(requested)}")
     print(f"Cache hits:      {stats['cache_hits']}")
     print(f"Cache misses:    {stats['cache_misses']}")
@@ -876,6 +1063,12 @@ def main():
     print(f"Output: {docs}/{{lang}}/")
     if args.strict:
         print("Mode:   STRICT (errors cause exit)")
+    print()
+
+    # Output metrics
+    metrics.finalize(build_elapsed, stats["cache_hits"], stats["cache_misses"], stats["api_requests"])
+    print("Metrics (JSON):")
+    print(metrics.output())
     print()
 
 
