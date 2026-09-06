@@ -73,7 +73,7 @@ STATE_FILE = DOCS_DIR / ".vitepress" / "translation-state.json"
 # Configurable via environment variables
 API_KEY = os.environ.get("TRANSLATION_API_KEY", os.environ.get("NVIDIA_API_KEY", "")).strip()
 BASE_URL = os.environ.get("TRANSLATION_BASE_URL", "https://integrate.api.nvidia.com/v1")
-MODEL = os.environ.get("TRANSLATION_MODEL", "nvidia/nemotron-3-super-120b-a12b")
+MODEL = os.environ.get("TRANSLATION_MODEL", "openai/gpt-oss-20b")
 WORKERS = int(os.environ.get("TRANSLATION_WORKERS", "4"))
 TIMEOUT = int(os.environ.get("TRANSLATION_TIMEOUT", "120"))
 MAX_RETRIES = int(os.environ.get("TRANSLATION_MAX_RETRIES", "5"))
