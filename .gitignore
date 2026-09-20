@@ -16,13 +16,10 @@ pnpm-debug.log*
 # environment variables
 .env
 .env.production
+.dev.vars
 
 # macOS-specific files
 .DS_Store
 
 # jetbrains setting folder
 .idea/
-
-# wrangler / cloudflare workers
-.wrangler/
-.dev.vars
