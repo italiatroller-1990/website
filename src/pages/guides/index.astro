@@ -7,8 +7,8 @@ import FormattedDate from '../../components/FormattedDate.astro';
 import Header from '../../components/Header.astro';
 import { SITE_DESCRIPTION, SITE_TITLE } from '../../consts';
 
-const posts = (await getCollection('lifelogs')).sort(
-    (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf(),
+const posts = (await getCollection('guides')).sort(
+	(a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf(),
 );
 ---
 
@@ -100,14 +100,14 @@ const posts = (await getCollection('lifelogs')).sort(
 	<body>
 		<Header />
 		<main>
-			<h1>Lifelogs</h1>
-			<p id="description">It's where I write blog posts about my life, tech and gaming things!</p>
+			<h1>Guides</h1>
+			<p id="description">It's where I write my guides, and embrace my grammar weakness!</p>
 			<section>
 				<ul>
 					{
 						posts.map((post) => (
 							<li>
-								<a href={`/lifelogs/${post.id}/`}>
+								<a href={`/guides/${post.id}/`}>
 									{post.data.heroImage && (
 										<Image width={720} height={360} src={post.data.heroImage} alt="" />
 									)}
