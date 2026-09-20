@@ -6,7 +6,7 @@ import HeaderLink from './HeaderLink.astro';
 <header>
     <nav>
         <a class="brand" href="/">
-            <img src="/favicon.png" alt="" />
+            <img src="/favicon.png" alt="" aria-hidden="true" width="32" height="32" decoding="async" fetchpriority="high" />
             <span>{SITE_TITLE}</span>
         </a>
 
@@ -40,7 +40,7 @@ import HeaderLink from './HeaderLink.astro';
         align-items: center;
         gap: 0.5rem;
         padding: 0.5rem 0;
-        color: var(--black);
+        color: var(--fg);
         text-decoration: none;
     }
 
@@ -71,7 +71,7 @@ import HeaderLink from './HeaderLink.astro';
     .internal-links :global(a) {
         position: relative;
         padding: 1em 0.5em;
-        color: var(--black);
+        color: var(--fg);
         text-decoration: none;
         transition:
             color 0.2s ease,

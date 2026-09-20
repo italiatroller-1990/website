@@ -10,7 +10,7 @@ const today = new Date();
 		margin-top: auto;
 		padding: 2em 1em 6em 1em;
 		background-color: var(--bg);
-		color: rgb(var(--gray));
+		color: var(--fg-muted);
 		text-align: center;
 	}
 	.social-links {
@@ -21,9 +21,15 @@ const today = new Date();
 	}
 	.social-links a {
 		text-decoration: none;
-		color: rgb(var(--gray));
+		color: var(--fg-muted);
 	}
 	.social-links a:hover {
-		color: rgb(var(--gray-dark));
+		color: var(--fg-bright);
+	}
+	footer a {
+		color: var(--accent);
+	}
+	footer a:hover {
+		color: var(--fg-bright);
 	}
 </style>

@@ -10,7 +10,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "deploy": "astro build && wrangler deploy",
+    "deploy": "astro build && npx wrangler deploy",
     "cf:dev": "astro build && wrangler dev"
   },
   "dependencies": {

@@ -8,6 +8,11 @@ import { defineConfig, fontProviders } from 'astro/config';
 export default defineConfig({
 	site: 'https://italiatroller.dpdns.org',
 	integrations: [mdx(), sitemap()],
+	build: {
+		// Inline all CSS (site is small) to eliminate render-blocking
+		// stylesheet requests flagged by PageSpeed Insights.
+		inlineStylesheets: 'always',
+	},
 	fonts: [
 		{
 			provider: fontProviders.local(),
